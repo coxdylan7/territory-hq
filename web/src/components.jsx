@@ -130,7 +130,7 @@ export function AuthScreen() {
         if (!r.ok) { setErr(d.error || 'Sign-in failed.'); return; }
         signIn(d.token, d.user);
       }
-    } catch (e) { setErr('Network error — try again.'); }
+    } catch (e) { setErr('Network error (was: ' + (e && e.message ? e.message : e) + ')'); }
   }
 }
 
