@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { useStore } from './store';
+import { useStore, signIn } from './store';
 import { api } from './api';
 
 export function Section({ children }) {
@@ -114,7 +114,6 @@ export function AuthScreen() {
     const el = (id) => document.getElementById(id);
     const email = el('authEmail').value.trim();
     const pass = el('authPass').value;
-    const { signIn } = useStore.getState();
     try {
       if (mode === 'signup') {
         const name = el('authName').value.trim();
