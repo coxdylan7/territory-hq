@@ -83,7 +83,7 @@ export default function Settings() {
         <div className="muted" style={{ marginBottom: 8 }}>New openings and direct searches are filtered to these counties. Pick the ones where you work.</div>
         <div className="chips">
           {ALL_COUNTIES.map((c) => (
-            <span key={c} className={`county ${s.counties.includes(c) ? 'on' : ''}`} onClick={() => toggleCounty(c)}>{c}</span>
+            <span key={c} className={`chip ${s.counties.includes(c) ? 'on' : ''}`} onClick={() => toggleCounty(c)}>{c}</span>
           ))}
         </div>
       </div>
@@ -93,7 +93,7 @@ export default function Settings() {
         <div className="muted" style={{ marginBottom: 8 }}>Your typical field days — used as defaults for the weekly route planner.</div>
         <div className="chips">
           {ALL_DAYS.map((d) => (
-            <span key={d} className={`county ${s.workDays.includes(d) ? 'on' : ''}`} onClick={() => toggleDay(d)}>{d}</span>
+            <span key={d} className={`chip ${s.workDays.includes(d) ? 'on' : ''}`} onClick={() => toggleDay(d)}>{d}</span>
           ))}
         </div>
       </div>

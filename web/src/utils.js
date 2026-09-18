@@ -136,6 +136,91 @@ export function gmapsUrl(home, ordered) {
   return 'https://www.google.com/maps/dir/' + pts.map((p) => encodeURIComponent(p)).join('/');
 }
 
+function fmtMi(m) { return (m / 1609.344).toFixed(1) + ' mi'; }
+function fmtMin(s) { return Math.round(s / 60) + ' min'; }
+
+// Decode an OSRM/Google encoded polyline into [{lat, lng}, ...].
+export function decodePolyline(encoded) {
+  const pts = [];
+  let index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {
+    let b, shift = 0, result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    const dLat = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lat += dLat;
+    shift = 0; result = 0;
+    do { b = encoded.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    const dLng = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lng += dLng;
+    pts.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return pts;
+}
+
+// Real driving-route optimization via OpenStreetMap (OSRM public server) — no API key.
+// Priority stops first (by priorityRank), then the flexible stops solved as a
+// traveling-salesman trip, then back home. Falls back is handled by the caller.
+const OSRM = 'https://router.project-osrm.org';
+
+async function osrmJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('OSRM http ' + res.status);
+  const d = await res.json();
+  if (d.code !== 'Ok') throw new Error('OSRM ' + (d.code || 'error') + (d.message ? ': ' + d.message : ''));
+  return d;
+}
+
+export async function optimizeRouteOSRM(home, stops) {
+  const withCoords = stops.filter((s) => s.lat != null && s.lng != null);
+  const skipped = stops.filter((s) => s.lat == null || s.lng == null);
+  if (!withCoords.length) return { legs: [{ name: 'Back home', isHome: true, distanceText: '0.0 mi' }], totalMiles: 0, totalMinutes: 0, geometry: [], skipped, engine: 'osrm' };
+
+  const priorityStops = withCoords.filter((s) => s.priority).sort((a, b) => (a.priorityRank || 99) - (b.priorityRank || 99));
+  const flexible = withCoords.filter((s) => !s.priority);
+
+  let ordered = [...priorityStops];
+  let anchor = priorityStops.length ? priorityStops[priorityStops.length - 1] : home;
+
+  if (flexible.length) {
+    const coords = [[anchor.lng, anchor.lat], ...flexible.map((s) => [s.lng, s.lat]), [anchor.lng, anchor.lat]];
+    const d = await osrmJson(OSRM + '/trip/v1/driving/' + coords.map((c) => c.join(',')).join(';') + '?roundtrip=true&source=first&destination=last&overview=false');
+    const orderByTrip = d.waypoints.map((w, i) => ({ i, rank: w.waypoint_index })).slice(1, 1 + flexible.length).sort((a, b) => a.rank - b.rank);
+    ordered = [...ordered, ...orderByTrip.map(({ i }) => flexible[i - 1])];
+  }
+
+  const full = [home, ...ordered, home];
+  const route = await osrmJson(OSRM + '/route/v1/driving/' + full.map((p) => p.lng + ',' + p.lat).join(';') + '?overview=full&steps=false&continue_straight=false');
+  const r = route.routes[0];
+
+  const legs = ordered.map((s, i) => {
+    const leg = r.legs[i] || { distance: 0, duration: 0 };
+    return {
+      ...s, distanceText: fmtMi(leg.distance || 0), durationText: fmtMin(leg.duration || 0),
+      distanceVal: leg.distance || 0, durationVal: leg.duration || 0,
+    };
+  });
+  const last = r.legs[r.legs.length - 1] || { distance: 0, duration: 0 };
+  legs.push({ name: 'Back home', isHome: true, distanceText: fmtMi(last.distance), durationText: fmtMin(last.duration), distanceVal: last.distance, durationVal: last.duration });
+
+  const totalMiles = legs.reduce((s, l) => s + (l.distanceVal || 0), 0) / 1609.344;
+  const totalMinutes = legs.reduce((s, l) => s + (l.durationVal || 0), 0) / 60;
+  return { legs, totalMiles, totalMinutes, geometry: decodePolyline(r.geometry), skipped, engine: 'osrm' };
+}
+
+// "Open in Google Maps" / "Open in Apple Maps" launch URLs (coordinate-based when possible).
+export function mapsUrls(home, ordered) {
+  const pts = [home, ...ordered, home].map((p) => (p.lat != null && p.lng != null) ? `${p.lat},${p.lng}` : null);
+  const hasCoords = ordered.every((o) => o.lat != null && o.lng != null) && home.lat != null && home.lng != null;
+  const src = hasCoords ? pts.map((p) => p).join('/') : null;
+  const gmaps = hasCoords
+    ? 'https://www.google.com/maps/dir/' + src
+    : gmapsUrl(home, ordered);
+  const apple = 'https://maps.apple.com/?dirflg=d' +
+    (home.lat != null && home.lng != null ? '&saddr=' + home.lat + ',' + home.lng : '') +
+    ordered.filter((o) => o.lat != null && o.lng != null).map((o) => '&daddr=' + o.lat + ',' + o.lng).join('');
+  return { gmaps, apple };
+}
+
 /* ---------------- Google Maps loading + geocoding ---------------- */
 let gmapsLoadPromise = null;
 export function loadGoogleMaps(key) {

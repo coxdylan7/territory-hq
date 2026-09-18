@@ -30,9 +30,9 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-/* ---------------- request log (dev) ---------------- */
+/* ---------------- request log (dev only) ---------------- */
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip || '?'}`);
+  if (process.env.DEBUG_REQUEST === '1') console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip || '?'}`);
   next();
 });
 
@@ -69,7 +69,6 @@ app.post('/api/auth/signup', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  console.log('login handler start');
   try {
     const { email, password } = req.body || {};
     const rows = await sql`SELECT * FROM users WHERE email = ${(email || '').toLowerCase()}`;
@@ -78,10 +77,9 @@ app.post('/api/auth/login', async (req, res) => {
     const token = newToken();
     const exp = new Date(Date.now() + 30 * 864e5).toISOString();
     await sql`INSERT INTO sessions (token, user_id, expires) VALUES (${token}, ${u.id}, ${exp})`;
-    console.log('login handler complete (200)');
     return json(res, { ok: true, token, user: userView(u) });
   } catch (err) {
-    console.error('login handler ERROR:', err.message);
+    console.error('login error:', err.message);
     return json(res, { error: 'login failed' }, 500);
   }
 });

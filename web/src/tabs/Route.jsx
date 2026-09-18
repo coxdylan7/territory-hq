@@ -1,5 +1,5 @@
 import { useStore } from '../store';
-import { currentWeekKey, currentPlan, optimizeRoute, optimizeRouteGoogle, gmapsUrl } from '../utils';
+import { currentWeekKey, currentPlan, optimizeRoute, optimizeRouteGoogle, optimizeRouteOSRM, mapsUrls } from '../utils';
 import { completeRoute, setPlanDay } from '../actions';
 import { MapView, Empty } from '../components';
 
@@ -24,11 +24,15 @@ export default function RouteTab() {
       if (usingGoogle) {
         result = await optimizeRouteGoogle(home, dayStops, st.settings.gmapsKey);
       } else {
-        const o = optimizeRoute(home, dayStops);
-        result = {
-          legs: [...o.ordered.map((x) => ({ ...x, distanceText: x.legMiles.toFixed(1) + ' mi' })), { name: 'Back home', isHome: true, distanceText: o.returnLeg.toFixed(1) + ' mi' }],
-          totalMiles: o.totalMiles, totalMinutes: 0, skipped: o.skipped, engine: 'straight-line',
-        };
+        try {
+          result = await optimizeRouteOSRM(home, dayStops);
+        } catch (osrmErr) {
+          const o = optimizeRoute(home, dayStops);
+          result = {
+            legs: [...o.ordered.map((x) => ({ ...x, distanceText: x.legMiles.toFixed(1) + ' mi' })), { name: 'Back home', isHome: true, distanceText: o.returnLeg.toFixed(1) + ' mi' }],
+            totalMiles: o.totalMiles, totalMinutes: 0, skipped: o.skipped, engine: 'straight-line', osrmErr: osrmErr.message,
+          };
+        }
       }
       result.day = day;
       set({ routeResult: result, routeLoading: false });
@@ -54,7 +58,9 @@ export default function RouteTab() {
     st.showToast(acc.name + ' added to ' + day + '.');
   }
 
-  const line = showingResult ? [home, ...r.legs.filter((l) => !l.isHome).map((l) => ({ lat: l.lat, lng: l.lng })), home] : null;
+  const line = showingResult && r.geometry && r.geometry.length > 1
+    ? r.geometry
+    : showingResult ? [home, ...r.legs.filter((l) => !l.isHome).map((l) => ({ lat: l.lat, lng: l.lng })), home] : null;
 
   const others = st.accounts.filter((a) => plan[a.id] !== day);
   const dayCounts = DAYS.map((d) => (
@@ -73,7 +79,7 @@ export default function RouteTab() {
       <>
         <div className="flexEnd" style={{ justifyContent: 'flex-start', marginBottom: 14 }}>
           <button className="primary" onClick={optimize} disabled={st.routeLoading}>
-            {st.routeLoading ? 'Optimizing…' : (usingGoogle ? 'Optimize with Google Maps' : 'Optimize route (straight-line)')}
+            {st.routeLoading ? 'Optimizing…' : (usingGoogle ? 'Optimize with Google Maps' : 'Optimize with OpenStreetMap')}
           </button>
         </div>
         {st.routeError && <div className="card" style={{ borderColor: 'var(--red)', color: 'var(--red)', marginBottom: 14 }}>{st.routeError}</div>}
@@ -117,9 +123,12 @@ export default function RouteTab() {
                 Total: <span className="disp" style={{ color: 'var(--amber)' }}>{r.totalMiles.toFixed(1)} mi</span>
                 {r.totalMinutes ? ` · ${Math.round(r.totalMinutes)} min drive time` : ''}
               </div>
-              <div style={{ marginTop: 10 }}><a href={gmapsUrl(st.settings, r.legs.filter((l) => !l.isHome))} target="_blank" rel="noreferrer">Open this route in Google Maps →</a></div>
+              <div className="row" style={{ marginTop: 10, gap: 10 }}>
+                <a className="btnLink" href={mapsUrls(st.settings, r.legs.filter((l) => !l.isHome)).gmaps} target="_blank" rel="noreferrer">Open in Google Maps →</a>
+                <a className="btnLink" href={mapsUrls(st.settings, r.legs.filter((l) => !l.isHome)).apple} target="_blank" rel="noreferrer">Open in Apple Maps →</a>
+              </div>
               {r.skipped.length > 0 && <div className="muted" style={{ marginTop: 10 }}>{r.skipped.length} stop(s) skipped — no location found. Re-save them in Accounts to geocode.</div>}
-              {r.engine === 'straight-line' && <div className="muted" style={{ marginTop: 10 }}>Using straight-line distance. Add a Google Maps API key in Settings for real driving routes and times.</div>}
+              {r.engine === 'straight-line' && r.osrmErr && <div className="muted" style={{ marginTop: 10 }}>OpenStreetMap routing was unavailable, so this used straight-line distance ({r.osrmErr}). Try again — or add a Google Maps API key in Settings for the Google engine.</div>}
               <div className="flexEnd" style={{ justifyContent: 'flex-start', marginTop: 14 }}>
                 <button className="primary" onClick={markVisited} disabled={st.visitLoading}>{st.visitLoading ? 'Logging…' : 'Complete route → log visits & mileage'}</button>
               </div>
@@ -138,7 +147,7 @@ export default function RouteTab() {
     <>
       <h2 className="disp" style={{ fontSize: 20 }}>Weekly route <span className="muted" style={{ fontSize: 13 }}>{currentWeekKey()}</span></h2>
       <div className="muted" style={{ marginBottom: 14, maxWidth: 620 }}>
-        {usingGoogle ? 'Optimized with live Google driving directions.' : 'Optimized with straight-line distance — add a Google Maps API key in Settings for real driving routes.'}
+        {usingGoogle ? 'Optimized with live Google driving directions.' : 'Optimized with free OpenStreetMap driving directions — no API key needed.'}
         {' '}Reads this week's plan from Accounts. Priority-override accounts are always visited first.
       </div>
       <div style={{ marginBottom: 16 }}>{dayCounts}</div>

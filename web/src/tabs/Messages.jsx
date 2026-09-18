@@ -141,7 +141,7 @@ ${lengthNote} No corporate jargon. ${isText ? 'No subject line.' : 'Include a sh
     } catch (err) { st.showToast('Resend failed: ' + err.message); }
   }
 
-  const msgs = [...st.messages].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 40);
+  const msgs = [...st.messages].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 40);
   const apiBase = (typeof location !== 'undefined' && location.origin && !location.origin.startsWith('file')) ? location.origin : 'https://your-site.netlify.app';
   const phone = (acc && acc.phone || '').replace(/[^0-9+]/g, '');
 
@@ -217,7 +217,7 @@ ${lengthNote} No corporate jargon. ${isText ? 'No subject line.' : 'Include a sh
         <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 8, padding: 8 }}>
           {st.accounts.length === 0 ? <div className="muted">No accounts yet.</div> : st.accounts.map((a) => (
             <label key={a.id} className="checkline" style={{ marginTop: 0 }}>
-              <input type="checkbox" disabled={!a.phone} checked={!!selected[a.id]} onChange={(e) => set({ ...selected, [a.id]: e.target.checked })} />
+              <input type="checkbox" disabled={!a.phone} checked={!!selected[a.id]} onChange={(e) => setSelected({ ...selected, [a.id]: e.target.checked })} />
               {a.name} {a.phone ? <span className="muted">{a.phone}</span> : <span className="muted">(no phone)</span>}
             </label>
           ))}
@@ -238,7 +238,7 @@ ${lengthNote} No corporate jargon. ${isText ? 'No subject line.' : 'Include a sh
           <tbody>
             {msgs.map((m) => (
               <tr key={m.id}>
-                <td data-label="When"><b>{m.date.slice(0, 10)}</b></td>
+                <td data-label="When"><b>{m.date ? m.date.slice(0, 10) : '—'}</b></td>
                 <td data-label="Client">{m.accountName}{m.blastId ? <span className="muted"> (blast)</span> : ''}</td>
                 <td data-label="Channel">{m.channel}</td>
                 <td data-label="Status">

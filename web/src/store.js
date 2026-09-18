@@ -64,6 +64,7 @@ export const useStore = create((set, get) => ({
       return;
     }
     try {
+      const normDate = (rows) => (rows || []).map((r) => ({ ...r, date: r.date || '' }));
       const [settings, accounts, expenses, ocmSeen, weekPlan, routeLog, credits, messages] = await Promise.all([
         api.get('/api/settings'),
         api.get('/api/accounts'),
@@ -74,7 +75,17 @@ export const useStore = create((set, get) => ({
         api.get('/api/credits'),
         api.get('/api/messages'),
       ]);
-      set({ settings: { ...DEFAULT_SETTINGS, ...settings }, accounts, expenses, ocmSeen, weekPlan, routeLog, credits, messages, auth: 'app' });
+      set({
+        settings: { ...DEFAULT_SETTINGS, ...settings },
+        accounts: (accounts || []).map((a) => ({ ...a, lastVisited: a.lastVisited || null })),
+        expenses: normDate(expenses),
+        ocmSeen,
+        weekPlan,
+        routeLog: normDate(routeLog),
+        credits: normDate(credits),
+        messages: normDate(messages),
+        auth: 'app',
+      });
     } catch (e) {
       console.error('init load failed', e);
       if (get().auth === 'app') set({ auth: 'app' });
