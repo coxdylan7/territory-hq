@@ -8,7 +8,6 @@ import { Empty } from '../components';
 export default function OCM() {
   const st = useStore();
   const { set } = st;
-  const [searchMode, setSearchMode] = useState('license');
   const [query, setQuery] = useState('');
   const seen = new Set(st.ocmSeen);
   const addedLicenses = new Set(st.accounts.map((a) => a.licenseNumber).filter(Boolean));
@@ -23,7 +22,7 @@ export default function OCM() {
 
   function onSearch() {
     if (!query.trim()) return;
-    searchOCM(query.trim(), searchMode);
+    searchOCM(query.trim());
   }
 
   return (
@@ -43,15 +42,11 @@ export default function OCM() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, marginBottom: 8 }}>Search OCM directly</div>
-        <div className="muted" style={{ marginBottom: 8 }}>Looks up any store by license number or name — ignores your county filter.</div>
-        <div style={{ marginBottom: 8 }}>
-          <span className={`dayChip ${searchMode === 'license' ? 'on' : ''}`} onClick={() => { setSearchMode('license'); setQuery(''); set({ ocmSearchResults: null, ocmSearchError: '' }); }}>License #</span>
-          <span className={`dayChip ${searchMode === 'name' ? 'on' : ''}`} onClick={() => { setSearchMode('name'); setQuery(''); set({ ocmSearchResults: null, ocmSearchError: '' }); }}>Name</span>
-        </div>
+        <div className="muted" style={{ marginBottom: 8 }}>Looks up any store by license number, name, or city — ignores your county filter.</div>
         <div className="row">
           <input
             value={query}
-            placeholder={searchMode === 'name' ? 'e.g. Green Leaf' : 'e.g. OCM-RD-0001'}
+            placeholder="e.g. Housing Works, OCM-CAURD, Syracuse"
             style={{ flex: 1, minWidth: 180 }}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSearch(); } }}

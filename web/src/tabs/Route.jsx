@@ -128,7 +128,7 @@ export default function RouteTab() {
                 <a className="btnLink" href={mapsUrls(st.settings, r.legs.filter((l) => !l.isHome)).apple} target="_blank" rel="noreferrer">Open in Apple Maps →</a>
               </div>
               {r.skipped.length > 0 && <div className="muted" style={{ marginTop: 10 }}>{r.skipped.length} stop(s) skipped — no location found. Re-save them in Accounts to geocode.</div>}
-              {r.engine === 'straight-line' && r.osrmErr && <div className="muted" style={{ marginTop: 10 }}>OpenStreetMap routing was unavailable, so this used straight-line distance ({r.osrmErr}). Try again — or add a Google Maps API key in Settings for the Google engine.</div>}
+              {r.engine === 'straight-line' && r.osrmErr && <div className="muted" style={{ marginTop: 10 }}>OpenStreetMap routing was briefly unavailable, so this used straight-line distance ({r.osrmErr}). Press Optimize again — it's free and needs no API key.</div>}
               <div className="flexEnd" style={{ justifyContent: 'flex-start', marginTop: 14 }}>
                 <button className="primary" onClick={markVisited} disabled={st.visitLoading}>{st.visitLoading ? 'Logging…' : 'Complete route → log visits & mileage'}</button>
               </div>

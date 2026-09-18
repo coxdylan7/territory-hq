@@ -31,9 +31,9 @@ export function Toast() {
 
 /* ---------------- MapView (Leaflet, dark tiles) ---------------- */
 const darkStyle = {
-  color: '#ffb020',
+  color: '#2dd4bf',
   weight: 3,
-  opacity: 0.85,
+  opacity: 0.9,
 };
 export function MapView({ home, stops, line, height = 340, fit = true }) {
   const ref = useRef(null);
@@ -52,13 +52,14 @@ export function MapView({ home, stops, line, height = 340, fit = true }) {
     (stops || []).forEach((s) => { pts.push({ lat: s.lat, lng: s.lng }); });
 
     if (home) {
-      L.circleMarker([home.lat, home.lng], { radius: 8, color: '#3ecf8e', fillColor: '#3ecf8e', fillOpacity: 1 }).addTo(map)
+      L.circleMarker([home.lat, home.lng], { radius: 8, color: '#2dd4bf', fillColor: '#2dd4bf', fillOpacity: 1 }).addTo(map)
         .bindPopup('Home');
     }
     (stops || []).forEach((s, i) => {
       if (s.lat == null) return;
       const n = s.priority ? '★' : String(i + 1);
-      L.circleMarker([s.lat, s.lng], { radius: 6, color: '#ffb020', fillColor: '#ffb020', fillOpacity: 1 }).addTo(map)
+      const c = s.priority ? '#a78bfa' : '#34d399';
+      L.circleMarker([s.lat, s.lng], { radius: 6, color: c, fillColor: c, fillOpacity: 1 }).addTo(map)
         .bindPopup(String(s.name || n));
     });
 
@@ -86,8 +87,8 @@ export function AuthScreen() {
     <div style={{ minHeight: '100vh', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div className="card" style={{ width: 400, maxWidth: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
-          <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: 'var(--amber)', boxShadow: '0 0 10px var(--amber)' }} />
-          <h1 className="disp" style={{ fontSize: 22, margin: '8px 0 2px' }}>Territory HQ</h1>
+          <span style={{ display: 'inline-flex', width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(135deg,#34d399,#14b8a6 55%,#06b6d4)', color: '#04150f', alignItems: 'center', justifyContent: 'center', fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 19, boxShadow: '0 10px 26px -8px rgba(20,184,166,.6), inset 0 1px 0 rgba(255,255,255,.35)' }}>TH</span>
+          <h1 className="disp" style={{ fontSize: 22, margin: '10px 0 2px' }}>Territory HQ</h1>
           <div className="muted">Field sales console for NY cannabis reps</div>
         </div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>

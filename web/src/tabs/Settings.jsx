@@ -122,7 +122,7 @@ export default function Settings() {
             <input type={showKey ? 'text' : 'password'} value={keyVal}
               onChange={(e) => setState({ settings: { ...s, gmapsKey: e.target.value.trim() }, dirty: true })}
               placeholder="AIza..." />
-            <div className="muted" style={{ fontSize: 12 }}>Enables: real driving-time route optimization, live directions, and better geocoding. Get one at the Google Cloud Console and enable Maps JavaScript + Directions APIs. Without it, routes use straight-line distance and the map uses free OpenStreetMap tiles — everything still works.</div>
+            <div className="muted" style={{ fontSize: 12 }}>Optional — routes already work free via OpenStreetMap with no key. Adding a Google key upgrades to live Google driving directions (traffic-aware) and more reliable geocoding. Get one at the Google Cloud Console and enable Maps JavaScript + Directions APIs.</div>
           </div>
           <div>
             <div style={{ height: 14 }} />

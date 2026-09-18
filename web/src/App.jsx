@@ -83,10 +83,11 @@ function Nav() {
   return (
     <nav>
       <div className="brand">
-        <span className="dot"></span>
-        <h1>Territory HQ</h1>
-        <br />
-        <span>field sales console</span>
+        <div className="logo">TH</div>
+        <div>
+          <h1>Territory HQ</h1>
+          <span>field sales console</span>
+        </div>
       </div>
       {TABS.filter(([id]) => id !== 'admin' || (user && user.role === 'admin')).map(([id, label, icon]) => {
         const badge = badgeFor(id);

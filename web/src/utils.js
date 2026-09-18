@@ -163,11 +163,20 @@ export function decodePolyline(encoded) {
 const OSRM = 'https://router.project-osrm.org';
 
 async function osrmJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('OSRM http ' + res.status);
-  const d = await res.json();
-  if (d.code !== 'Ok') throw new Error('OSRM ' + (d.code || 'error') + (d.message ? ': ' + d.message : ''));
-  return d;
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('OSRM http ' + res.status);
+      const d = await res.json();
+      if (d.code !== 'Ok') throw new Error('OSRM ' + (d.code || 'error') + (d.message ? ': ' + d.message : ''));
+      return d;
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
 }
 
 export async function optimizeRouteOSRM(home, stops) {

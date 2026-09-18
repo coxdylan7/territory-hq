@@ -35,14 +35,12 @@ export async function fetchOCM() {
   }
 }
 
-export async function searchOCM(query, mode) {
+export async function searchOCM(query) {
   const st = useStore.getState();
   st.set({ ocmSearchLoading: true, ocmSearchError: '', ocmSearchResults: null });
   try {
     const q = query.replace(/'/g, "''");
-    const where = mode === 'name'
-      ? `(upper(entity_name) like upper('%${q}%') OR upper(dba) like upper('%${q}%'))`
-      : `license_number like upper('%${q}%')`;
+    const where = `(license_number like upper('%${q}%') OR upper(entity_name) like upper('%${q}%') OR upper(dba) like upper('%${q}%') OR upper(city) like upper('%${q}%'))`;
     const url = OCM_DS + '?$limit=25&$where=' + encodeURIComponent(where);
     const res = await fetch(url);
     if (!res.ok) throw new Error('OCM API http ' + res.status);
