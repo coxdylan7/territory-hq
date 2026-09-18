@@ -1,0 +1,11 @@
+node_modules/
+web/dist/
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+supabase/.temp/
+supabase/.branches/
+README.md

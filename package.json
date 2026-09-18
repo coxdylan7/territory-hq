@@ -1,0 +1,15 @@
+{
+  "name": "territory-hq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Territory HQ — Express + Supabase API serving the Vite/React frontend",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm --prefix web install --no-audit --no-fund && npm --prefix web run build",
+    "start": "node --env-file-if-exists=.env api/src/server.js",
+    "dev:api": "node --env-file-if-exists=.env api/src/server.js",
+    "dev:web": "npm --prefix web run dev"
+  }
+}

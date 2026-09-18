@@ -1,0 +1,16 @@
+# Render blueprint — Blueprints > New Blueprint Instance > paste repo URL.
+# Requires DATABASE_URL (and ADMIN_EMAIL) to be set after the service is created.
+services:
+  - type: web
+    name: territory-hq
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: PORT
+        value: 8080

@@ -1,6 +1,8 @@
 // Territory HQ — REST API (Express + Supabase Postgres)
 // Faithful port of reference/netlify/functions/api.js (Netlify/Turso)
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const { sql } = require('./db');
 const { ensureSchema } = require('./schema');
 const { smsConfigured, sendSmsTwilio, proxyAnthropic } = require('./integrations');
@@ -27,6 +29,12 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+
+/* ---------------- request log (dev) ---------------- */
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip || '?'}`);
+  next();
+});
 
 /* ---------------- current user from bearer token ---------------- */
 async function currentUser(req) {
@@ -61,14 +69,21 @@ app.post('/api/auth/signup', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body || {};
-  const rows = await sql`SELECT * FROM users WHERE email = ${(email || '').toLowerCase()}`;
-  const u = rows[0];
-  if (!u || !verifyPassword(password || '', u.pass_hash)) return json(res, { error: 'Invalid email or password.' }, 401);
-  const token = newToken();
-  const exp = new Date(Date.now() + 30 * 864e5).toISOString();
-  await sql`INSERT INTO sessions (token, user_id, expires) VALUES (${token}, ${u.id}, ${exp})`;
-  return json(res, { ok: true, token, user: userView(u) });
+  console.log('login handler start');
+  try {
+    const { email, password } = req.body || {};
+    const rows = await sql`SELECT * FROM users WHERE email = ${(email || '').toLowerCase()}`;
+    const u = rows[0];
+    if (!u || !verifyPassword(password || '', u.pass_hash)) return json(res, { error: 'Invalid email or password.' }, 401);
+    const token = newToken();
+    const exp = new Date(Date.now() + 30 * 864e5).toISOString();
+    await sql`INSERT INTO sessions (token, user_id, expires) VALUES (${token}, ${u.id}, ${exp})`;
+    console.log('login handler complete (200)');
+    return json(res, { ok: true, token, user: userView(u) });
+  } catch (err) {
+    console.error('login handler ERROR:', err.message);
+    return json(res, { error: 'login failed' }, 500);
+  }
 });
 
 app.post('/api/auth/logout', async (req, res) => {
@@ -335,6 +350,16 @@ app.post('/api/generate-message', gate(async (req, res, user) => {
 /* ================= catch-all ================= */
 app.use('/api', (req, res) => json(res, { error: 'not found' }, 404));
 
+/* ================= static frontend (production) ================= */
+const WEB_DIST = path.resolve(__dirname, '../../web/dist');
+if (process.env.SERVE_WEB !== 'false' && fs.existsSync(WEB_DIST)) {
+  app.use(express.static(WEB_DIST));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(WEB_DIST, 'index.html'));
+  });
+}
+
 /* ================= error handling ================= */
 app.use((err, req, res, next) => {
   if (err && err.type === 'entity.parse.failed') return json(res, { error: 'invalid JSON body' }, 400);
@@ -344,7 +369,10 @@ app.use((err, req, res, next) => {
 
 /* ================= start ================= */
 const PORT = parseInt(process.env.PORT || '8080', 10);
-ensureSchema()
+const boot = process.env.SKIP_SCHEMA === '1'
+  ? Promise.resolve()
+  : ensureSchema();
+boot
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Territory HQ API listening on http://localhost:${PORT}`);
