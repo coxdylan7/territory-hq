@@ -236,17 +236,21 @@ export function loadGoogleMaps(key) {
   if (window.google && window.google.maps) return Promise.resolve();
   if (gmapsLoadPromise) return gmapsLoadPromise;
   gmapsLoadPromise = new Promise((resolve, reject) => {
-    window.__gmapsReady = () => resolve();
+    const watchdog = setTimeout(() => {
+      gmapsLoadPromise = null;
+      reject(new Error('timed out loading Google Maps (bad key?)'));
+    }, 5000);
+    window.__gmapsReady = () => { clearTimeout(watchdog); resolve(); };
     const s = document.createElement('script');
     s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&callback=__gmapsReady&libraries=places`;
-    s.onerror = () => { gmapsLoadPromise = null; reject(new Error('Failed to load Google Maps JS API')); };
+    s.onerror = () => { clearTimeout(watchdog); gmapsLoadPromise = null; reject(new Error('Failed to load Google Maps JS API')); };
     document.head.appendChild(s);
   });
   return gmapsLoadPromise;
 }
 
 export async function geocode(addressStr, gmapsKey) {
-  if (gmapsKey) {
+  if (gmapsKey && /^AIza/.test(gmapsKey)) {
     try {
       await loadGoogleMaps(gmapsKey);
       const geocoder = new google.maps.Geocoder();
@@ -258,6 +262,8 @@ export async function geocode(addressStr, gmapsKey) {
         return { lat: loc.lat(), lng: loc.lng() };
       }
     } catch (e) { console.error('Google geocode failed, falling back to OSM', e); }
+  } else if (gmapsKey) {
+    console.error('Ignoring invalid Google Maps key (must start with AIza).');
   }
   try {
     const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' + encodeURIComponent(addressStr);

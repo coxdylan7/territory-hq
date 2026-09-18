@@ -85,8 +85,11 @@ export async function addAccountFromOCM(r) {
   const existing = st.accounts.find((a) => a.licenseNumber === r.license_number);
   if (existing) { st.showToast(existing.name + ' is already an account.'); return; }
   const addr = `${r.address_line_1}, ${r.city}, NY ${r.zip_code || ''}`;
-  st.showToast('Adding & locating…');
-  const loc = await geocode(addr, st.settings.gmapsKey);
+  st.showToast('Adding ' + (r.dba || r.entity_name) + '…');
+  const loc = await Promise.race([
+    geocode(addr, st.settings.gmapsKey),
+    new Promise((r2) => setTimeout(() => r2(null), 8000)),
+  ]);
   const acct = {
     id: 'a' + Date.now(), name: r.dba || r.entity_name, dba: r.dba || '', address: r.address_line_1 || '',
     city: r.city || '', county: r.county || '', phone: '', email: '', contactName: '', status: 'Prospect',
