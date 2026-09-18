@@ -1,0 +1,18 @@
+# Supabase configuration (schema-as-code).
+# Project ref: https://supabase.com/dashboard/project/qgxopgmuxfpdifwtbbwt
+
+project_id = "qgxopgmuxfpdifwtbbwt"
+
+[api]
+enabled = true
+
+[db]
+# The Postgres password is not stored here; provide it via `supabase link`
+# or the SUPABASE_DB_PASSWORD env var. Schema changes come from this repo's
+# supabase/migrations/ directory.
+
+[studio]
+enabled = true
+
+[import_map]
+enabled = true

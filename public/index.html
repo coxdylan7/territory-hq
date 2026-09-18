@@ -1,0 +1,2013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Territory HQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212a; --line:#2a2f3a;
+    --amber:#ffb020; --amber-dim:#7a5a1e; --green:#3ecf8e; --red:#ff5d5d;
+    --text:#e8e9ec; --sub:#8b909c; --sub2:#5c6270;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  h1,h2,h3,.disp{font-family:'Space Grotesk',sans-serif;}
+  #app{display:flex;min-height:100vh;}
+  nav{width:210px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--line);padding:18px 10px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  nav .brand{padding:6px 10px 18px;}
+  nav .brand .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--amber);margin-right:7px;box-shadow:0 0 8px var(--amber);}
+  nav .brand h1{font-size:17px;margin:8px 0 0;letter-spacing:.3px;}
+  nav .brand span{font-size:11px;color:var(--sub2);}
+  nav button.tab{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;border:none;color:var(--sub);padding:10px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;margin-bottom:2px;font-family:'Inter';}
+  nav button.tab:hover{background:var(--panel2);color:var(--text);}
+  nav button.tab.active{background:var(--panel2);color:var(--amber);font-weight:600;}
+  nav button.tab .badge{margin-left:auto;background:var(--amber);color:#1a1305;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;}
+  main{flex:1;padding:26px 34px 60px;max-width:1180px;}
+  .row{display:flex;gap:14px;flex-wrap:wrap;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .cards4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+  .stat .num{font-size:26px;font-weight:700;font-family:'Space Grotesk';color:var(--amber);}
+  .stat .lbl{font-size:11.5px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
+  h2.section{font-size:15px;text-transform:uppercase;letter-spacing:.6px;color:var(--sub);margin:26px 0 12px;font-weight:600;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;color:var(--sub2);font-size:11px;text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:1px solid var(--line);}
+  td{padding:9px 10px;border-bottom:1px solid #20242e;vertical-align:top;}
+  tr:hover td{background:#191d25;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+  .pill.prospect{background:#2a2f3a;color:#a7adbb;}
+  .pill.active{background:#12331f;color:var(--green);}
+  .pill.tracking{background:#2a2410;color:var(--amber);}
+  .pill.activation{background:#331222;color:#ff77b0;}
+  .pill.inactive{background:#221414;color:var(--red);}
+  .priority{color:var(--amber);font-weight:700;}
+  button.primary{background:var(--amber);color:#1a1305;border:none;padding:9px 16px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;}
+  button.primary:hover{background:#ffc245;}
+  button.ghost{background:none;border:1px solid var(--line);color:var(--text);padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;}
+  button.ghost:hover{border-color:var(--sub);}
+  button.small{padding:4px 9px;font-size:12px;}
+  input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:7px;padding:8px 10px;font-size:13.5px;font-family:'Inter';width:100%;}
+  textarea{resize:vertical;}
+  label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px;margin-top:10px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;}
+  .modalBg{position:fixed;inset:0;background:#000a;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto;z-index:50;}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;width:560px;max-width:100%;}
+  .modal h3{margin-top:0;}
+  .closeX{float:right;background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer;}
+  .flexEnd{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+  .empty{color:var(--sub2);font-size:13px;padding:20px;text-align:center;}
+  .newTag{background:var(--amber);color:#1a1305;font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;}
+  canvas{background:#12151b;border-radius:10px;border:1px solid var(--line);}
+  .stopRow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #20242e;}
+  .stopNum{width:22px;height:22px;border-radius:50%;background:var(--panel2);color:var(--amber);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .muted{color:var(--sub);font-size:12.5px;}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--amber);padding:10px 16px;border-radius:8px;font-size:13px;z-index:99;}
+  a{color:var(--amber);}
+  .dayChip{display:inline-block;padding:5px 11px;border-radius:7px;border:1px solid var(--line);margin-right:6px;margin-bottom:6px;cursor:pointer;font-size:12.5px;}
+  .dayChip.on{background:var(--amber);color:#1a1305;border-color:var(--amber);font-weight:600;}
+  .countyChip{display:inline-block;padding:4px 10px;border-radius:6px;border:1px solid var(--line);margin:0 5px 5px 0;cursor:pointer;font-size:12px;}
+  .countyChip.on{background:var(--amber-dim);color:var(--amber);border-color:var(--amber);}
+
+  @media (max-width: 760px){
+    #app{flex-direction:column;}
+    nav{position:fixed;bottom:0;left:0;right:0;top:auto;width:100%;height:60px;display:flex;align-items:stretch;justify-content:space-around;overflow:visible;padding:4px 2px;gap:0;border-top:1px solid var(--line);border-right:none;border-bottom:none;z-index:50;}
+    nav .brand{display:none;}
+    nav button.tab{flex:1;min-width:0;flex-direction:column;justify-content:center;align-items:center;gap:2px;padding:6px 1px;margin:2px;font-size:9.5px;white-space:normal;border-radius:8px;position:relative;}
+    nav button.tab .tabIcon{font-size:18px;line-height:1;}
+    nav button.tab .tabLabel{font-size:9px;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+    nav button.tab .badge{position:absolute;top:2px;right:10%;margin-left:0;}
+    main{padding:16px 14px 78px;max-width:100%;}
+    .cards4{grid-template-columns:repeat(2,1fr);}
+    .grid2{grid-template-columns:1fr;}
+    .row{flex-direction:column;}
+    .modalBg{padding:0;align-items:stretch;}
+    .modal{width:100%;max-width:100%;border-radius:0;min-height:100vh;padding:18px 16px 40px;}
+    table{display:block;}
+    table, thead, tbody, tr{display:block;width:100%;}
+    thead{display:none;}
+    tr{border-bottom:1px solid var(--line);padding:10px 0;}
+    td{display:flex;justify-content:space-between;gap:12px;border-bottom:none;padding:4px 2px;text-align:right;}
+    td:first-child{font-weight:600;text-align:left;}
+    td:before{content:attr(data-label);color:var(--sub2);font-size:11px;text-transform:uppercase;text-align:left;flex-shrink:0;}
+    .toast{left:12px;right:12px;bottom:72px;text-align:center;}
+    canvas{width:100%;height:auto;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ---------------- API client (Netlify Functions + Turso) ---------------- */
+let AUTH_TOKEN = (typeof localStorage!=='undefined' && localStorage.getItem('thq_session')) || '';
+function authHeaders(){ return AUTH_TOKEN ? { 'Authorization':'Bearer '+AUTH_TOKEN } : {}; }
+async function apiFetch(path, opts){
+  opts = opts || {};
+  const r = await fetch(path, {...opts, headers:{...(opts.headers||{}), ...authHeaders()}});
+  if(r.status===401){ showAuthScreen(); throw new Error('unauthorized'); }
+  if(r.status===402){ let d={}; try{ d=await r.json(); }catch(e){} showPendingScreen(d.reason); throw new Error('inactive'); }
+  if(!r.ok){
+    let msg = (opts.method||'GET')+' '+path+' failed ('+r.status+')';
+    try{ const d = await r.json(); if(d && d.error) msg += ': '+d.error; }catch(e){}
+    throw new Error(msg);
+  }
+  return r.json();
+}
+const api = {
+  get: (p)=>apiFetch(p),
+  post: (p,b)=>apiFetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}),
+  put: (p,b)=>apiFetch(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}),
+  del: (p)=>apiFetch(p,{method:'DELETE'})
+};
+
+/* ---------------- auth screens ---------------- */
+function showAuthScreen(mode){
+  mode = mode || 'login';
+  const app = document.getElementById('app');
+  app.innerHTML = `
+  <div style="min-height:100vh;width:100%;display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div class="card" style="width:400px;max-width:100%;">
+      <div style="text-align:center;margin-bottom:14px;">
+        <span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--amber);box-shadow:0 0 10px var(--amber);"></span>
+        <h1 class="disp" style="font-size:22px;margin:8px 0 2px;">Territory HQ</h1>
+        <div class="muted">Field sales console for NY cannabis reps</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;">
+        <button class="${mode==='login'?'primary':'ghost'}" style="flex:1;" id="authTabLogin">Sign in</button>
+        <button class="${mode==='signup'?'primary':'ghost'}" style="flex:1;" id="authTabSignup">Create account</button>
+      </div>
+      ${mode==='signup'?`<label>Full name</label><input id="authName" placeholder="Your name">`:''}
+      <label>Email</label><input id="authEmail" type="email" placeholder="you@company.com" autocomplete="username">
+      <label>Password</label><input id="authPass" type="password" placeholder="${mode==='signup'?'Choose a password (8+ characters)':'Password'}" autocomplete="${mode==='signup'?'new-password':'current-password'}">
+      <div id="authErr" class="muted" style="color:var(--red);margin-top:8px;display:none;"></div>
+      <div class="flexEnd" style="margin-top:14px;">
+        <button class="primary" style="width:100%;" id="authSubmit">${mode==='signup'?'Create account':'Sign in'}</button>
+      </div>
+      ${mode==='signup'?`<div class="muted" style="margin-top:10px;font-size:12px;">New accounts are reviewed before activation. You\u2019ll get access once approved.</div>`:''}
+    </div>
+  </div>`;
+  document.getElementById('authTabLogin').onclick=()=>showAuthScreen('login');
+  document.getElementById('authTabSignup').onclick=()=>showAuthScreen('signup');
+  const err = (m)=>{ const el=document.getElementById('authErr'); el.textContent=m; el.style.display='block'; };
+  const submit = async ()=>{
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPass').value;
+    try{
+      if(mode==='signup'){
+        const name = document.getElementById('authName').value.trim();
+        if(!name || !email || pass.length<8){ err('Fill all fields; password needs 8+ characters.'); return; }
+        const r = await fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,password:pass})});
+        const d = await r.json();
+        if(!r.ok){ err(d.error||'Sign-up failed.'); return; }
+        if(d.token){ AUTH_TOKEN=d.token; localStorage.setItem('thq_session',AUTH_TOKEN); init(); }
+        else showPendingScreen();
+      } else {
+        const r = await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pass})});
+        const d = await r.json();
+        if(!r.ok){ err(d.error||'Sign-in failed.'); return; }
+        AUTH_TOKEN=d.token; localStorage.setItem('thq_session',AUTH_TOKEN);
+        init();
+      }
+    }catch(e){ err('Network error \u2014 try again.'); }
+  };
+  document.getElementById('authSubmit').onclick=submit;
+  document.getElementById('authPass').addEventListener('keydown',e=>{ if(e.key==='Enter') submit(); });
+}
+function showPendingScreen(reason){
+  const app = document.getElementById('app');
+  const expired = reason==='expired';
+  app.innerHTML = `
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;width:100%;">
+    <div class="card" style="width:420px;max-width:100%;text-align:center;">
+      <h2 class="disp">${expired?'Subscription expired':'Account pending approval'}</h2>
+      <div class="muted" style="margin:10px 0 16px;">${expired?'Your subscription has lapsed. Contact your administrator to renew access.':'Thanks for signing up! Your account is being reviewed. You\u2019ll have access as soon as it\u2019s approved.'}</div>
+      <button class="ghost" id="pendingLogout">Sign out</button>
+    </div>
+  </div>`;
+  document.getElementById('pendingLogout').onclick=logout;
+}
+function logout(){
+  try{ fetch('/api/auth/logout',{method:'POST',headers:authHeaders()}); }catch(e){}
+  try{ localStorage.removeItem('thq_session'); }catch(e){}
+  AUTH_TOKEN='';
+  showAuthScreen('login');
+}
+
+/* ---------------- app state ---------------- */
+let state = {
+  tab: 'dashboard',
+  settings: { homeAddress:'', homeLat:null, homeLng:null, counties:[], workDays:['Mon','Tue','Wed','Thu','Fri'], mileageRate:0.70, gmapsKey:'', defaultCredit:0, alertEmail:'' },
+  routeResult: null,
+  routeLoading: false,
+  routeError: '',
+  acctSort: 'recent',
+  visitLoading: false,
+  accounts: [],
+  expenses: [],
+  ocmSeen: [],
+  ocmResults: [],
+  ocmLoading: false,
+  ocmError: '',
+  toast: '',
+  weekPlan: {},
+  routeLog: [],
+  credits: [],
+  messages: [],
+  reportPeriod: 'week',
+  reportRef: null,
+};
+
+/* ---------------- week helpers ---------------- */
+function weekKey(d){
+  d = d ? new Date(d) : new Date();
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (dt.getUTCDay() + 6) % 7;           // Mon=0
+  dt.setUTCDate(dt.getUTCDate() - dayNum + 3);        // nearest Thursday
+  const firstThu = new Date(Date.UTC(dt.getUTCFullYear(),0,4));
+  const wk = 1 + Math.round(((dt - firstThu)/86400000 - 3 + ((firstThu.getUTCDay()+6)%7))/7);
+  return `${dt.getUTCFullYear()}-W${String(wk).padStart(2,'0')}`;
+}
+function currentWeekKey(){ return weekKey(new Date()); }
+function planForWeek(wk){ return state.weekPlan[wk] || {}; }
+function currentPlan(){ return planForWeek(currentWeekKey()); }
+
+function setState(patch){ state = {...state, ...patch}; render(); }
+function showToast(msg){ setState({toast:msg}); setTimeout(()=>{ state.toast=''; render(); }, 2500); }
+
+/* ---------------- geo helpers ---------------- */
+function haversineMiles(a,b){
+  if(a==null||b==null) return null;
+  const R=3958.8, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
+  const x=Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+let gmapsLoadPromise = null;
+function loadGoogleMaps(key){
+  if(window.google && window.google.maps) return Promise.resolve();
+  if(gmapsLoadPromise) return gmapsLoadPromise;
+  gmapsLoadPromise = new Promise((resolve,reject)=>{
+    window.__gmapsReady = ()=>resolve();
+    const s = document.createElement('script');
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&callback=__gmapsReady&libraries=places`;
+    s.onerror = ()=>{ gmapsLoadPromise=null; reject(new Error('Failed to load Google Maps JS API — check the key and its restrictions.')); };
+    document.head.appendChild(s);
+  });
+  return gmapsLoadPromise;
+}
+
+async function geocode(addressStr){
+  if(state.settings.gmapsKey){
+    try{
+      await loadGoogleMaps(state.settings.gmapsKey);
+      const geocoder = new google.maps.Geocoder();
+      const result = await new Promise((resolve,reject)=>{
+        geocoder.geocode({address:addressStr}, (res,status)=> status==='OK' ? resolve(res) : reject(new Error(status)));
+      });
+      if(result && result[0]){
+        const loc = result[0].geometry.location;
+        return { lat: loc.lat(), lng: loc.lng() };
+      }
+    }catch(e){ console.error('Google geocode failed, falling back to OSM', e); }
+  }
+  try{
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' + encodeURIComponent(addressStr);
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('geocode http '+res.status);
+    const data = await res.json();
+    if(data && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    return null;
+  }catch(e){ console.error('geocode failed', e); return null; }
+}
+
+// Real driving-route optimization via Google Directions API.
+// Priority stops are visited first (fixed order), then remaining stops are
+// optimized by Google's waypoint optimizer, ending back home.
+async function optimizeRouteGoogle(home, stops){
+  await loadGoogleMaps(state.settings.gmapsKey);
+  const svc = new google.maps.DirectionsService();
+  const priorityStops = stops.filter(s=>s.priority && s.lat!=null).sort((a,b)=>(a.priorityRank||99)-(b.priorityRank||99));
+  const flexible = stops.filter(s=>!s.priority && s.lat!=null);
+  const skipped = stops.filter(s=>s.lat==null||s.lng==null);
+  const homeLoc = {lat:home.lat, lng:home.lng};
+  let legs = [], renderResults = [], cursor = homeLoc;
+
+  const runRoute = (origin,destination,waypoints,optimize) => new Promise((resolve,reject)=>{
+    svc.route({origin,destination,waypoints,optimizeWaypoints:optimize,travelMode:'DRIVING'}, (res,status)=>{
+      status==='OK' ? resolve(res) : reject(new Error(status));
+    });
+  });
+
+  if(priorityStops.length){
+    const dest = {lat:priorityStops[priorityStops.length-1].lat,lng:priorityStops[priorityStops.length-1].lng};
+    const wps = priorityStops.slice(0,-1).map(s=>({location:{lat:s.lat,lng:s.lng},stopover:true}));
+    const result = await runRoute(cursor, dest, wps, false);
+    renderResults.push(result);
+    result.routes[0].legs.forEach((l,i)=>legs.push({...priorityStops[i], distanceText:l.distance.text, durationText:l.duration.text, distanceVal:l.distance.value, durationVal:l.duration.value}));
+    cursor = dest;
+  }
+
+  if(flexible.length){
+    const wps = flexible.map(s=>({location:{lat:s.lat,lng:s.lng},stopover:true}));
+    const result = await runRoute(cursor, homeLoc, wps, true);
+    renderResults.push(result);
+    const order = result.routes[0].waypoint_order;
+    const legsArr = result.routes[0].legs;
+    order.forEach((idx,i)=>legs.push({...flexible[idx], distanceText:legsArr[i].distance.text, durationText:legsArr[i].duration.text, distanceVal:legsArr[i].distance.value, durationVal:legsArr[i].duration.value}));
+    const lastLeg = legsArr[legsArr.length-1];
+    legs.push({name:'Back home', isHome:true, distanceText:lastLeg.distance.text, durationText:lastLeg.duration.text, distanceVal:lastLeg.distance.value, durationVal:lastLeg.duration.value});
+  } else if(priorityStops.length){
+    const result = await runRoute(cursor, homeLoc, [], false);
+    renderResults.push(result);
+    const l = result.routes[0].legs[0];
+    legs.push({name:'Back home', isHome:true, distanceText:l.distance.text, durationText:l.duration.text, distanceVal:l.distance.value, durationVal:l.duration.value});
+  }
+
+  const totalMiles = legs.reduce((s,l)=>s+(l.distanceVal||0),0)/1609.34;
+  const totalMinutes = legs.reduce((s,l)=>s+(l.durationVal||0),0)/60;
+  return { legs, totalMiles, totalMinutes, renderResults, skipped, engine:'google' };
+}
+
+/* ---------------- route optimization ---------------- */
+// nearest-neighbor + simple 2-opt over the "flexible" (non-priority) stops.
+// priority stops (priority=true) are visited first, in ascending order of the priorityRank field.
+function optimizeRoute(home, stops){
+  const withCoords = stops.filter(s=>s.lat!=null && s.lng!=null);
+  const priorityStops = withCoords.filter(s=>s.priority).sort((a,b)=>(a.priorityRank||99)-(b.priorityRank||99));
+  let flexible = withCoords.filter(s=>!s.priority);
+
+  let route = [];
+  let cursor = home;
+  priorityStops.forEach(s=>{ route.push(s); cursor = {lat:s.lat,lng:s.lng}; });
+
+  // nearest neighbor for flexible stops starting from cursor
+  let remaining = [...flexible];
+  while(remaining.length){
+    let bestIdx=0, bestDist=Infinity;
+    remaining.forEach((s,i)=>{
+      const d = haversineMiles(cursor,{lat:s.lat,lng:s.lng});
+      if(d<bestDist){bestDist=d;bestIdx=i;}
+    });
+    const next = remaining.splice(bestIdx,1)[0];
+    route.push(next);
+    cursor = {lat:next.lat,lng:next.lng};
+  }
+
+  // 2-opt improvement pass, only reordering within the flexible segment (after priority stops)
+  const pLen = priorityStops.length;
+  function routeLength(seq){
+    let total = haversineMiles(home,{lat:seq[0]?.lat,lng:seq[0]?.lng}) || 0;
+    for(let i=0;i<seq.length-1;i++) total += haversineMiles({lat:seq[i].lat,lng:seq[i].lng},{lat:seq[i+1].lat,lng:seq[i+1].lng}) || 0;
+    total += haversineMiles({lat:seq[seq.length-1]?.lat,lng:seq[seq.length-1]?.lng}, home) || 0;
+    return total;
+  }
+  let improved = true, guard=0;
+  while(improved && guard<200){
+    improved=false; guard++;
+    for(let i=pLen; i<route.length-1; i++){
+      for(let j=i+1; j<route.length; j++){
+        const newRoute = [...route.slice(0,i), ...route.slice(i,j+1).reverse(), ...route.slice(j+1)];
+        if(routeLength(newRoute) < routeLength(route) - 0.001){ route = newRoute; improved=true; }
+      }
+    }
+  }
+
+  // build stepwise output
+  let totalMiles=0, prev=home, out=[];
+  route.forEach(s=>{
+    const d = haversineMiles(prev,{lat:s.lat,lng:s.lng}) || 0;
+    totalMiles += d;
+    out.push({...s, legMiles:d});
+    prev = {lat:s.lat,lng:s.lng};
+  });
+  const lastLeg = haversineMiles(prev, home) || 0;
+  totalMiles += lastLeg;
+  const skipped = stops.filter(s=>s.lat==null||s.lng==null);
+  return { ordered: out, totalMiles, returnLeg:lastLeg, skipped };
+}
+
+function gmapsUrl(home, ordered){
+  const pts = [home.homeAddress, ...ordered.map(o=>o.address+', '+ (o.city||'')+', NY'), home.homeAddress];
+  return 'https://www.google.com/maps/dir/' + pts.map(p=>encodeURIComponent(p)).join('/');
+}
+
+/* ---------------- OCM sync ---------------- */
+async function fetchOCM(){
+  setState({ocmLoading:true, ocmError:''});
+  try{
+    let url = 'https://data.ny.gov/resource/jskf-tt3q.json?$limit=5000&$where=' +
+      encodeURIComponent(`license_type like '%Retail%' AND license_status = 'Active'`);
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('OCM API http '+res.status);
+    let data = await res.json();
+    if(state.settings.counties.length){
+      data = data.filter(d => state.settings.counties.includes(d.county));
+    }
+    const addedLicenses = new Set(state.accounts.map(a=>a.licenseNumber).filter(Boolean));
+    data = data.filter(d => !addedLicenses.has(d.license_number));
+    setState({ocmResults:data, ocmLoading:false});
+  }catch(e){
+    setState({ocmLoading:false, ocmError:'Could not reach the OCM open data API right now. ('+e.message+')'});
+  }
+}
+
+/* search OCM by license number directly, ignoring the county filter */
+async function searchOCM(query, mode){
+  setState({ocmSearchLoading:true, ocmSearchError:'', ocmSearchResults:null});
+  try{
+    const q = query.replace(/'/g,"''");
+    const where = mode==='name'
+      ? `(upper(entity_name) like upper('%${q}%') OR upper(dba) like upper('%${q}%'))`
+      : `license_number = '${q}'`;
+    const url = 'https://data.ny.gov/resource/jskf-tt3q.json?$limit=25&$where=' + encodeURIComponent(where);
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('OCM API http '+res.status);
+    const data = await res.json();
+    if(!data.length){ setState({ocmSearchLoading:false, ocmSearchError:'No matches for "'+query+'".'}); return; }
+    setState({ocmSearchLoading:false, ocmSearchResults:data});
+  }catch(e){
+    setState({ocmSearchLoading:false, ocmSearchError:'Search failed: '+e.message});
+  }
+}
+
+/* ---------------- Anthropic message generation (server-side proxy) ---------------- */
+async function generateMessage(prompt){
+  const res = await fetch('/api/generate-message',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ prompt })
+  });
+  const data = await res.json();
+  const block = (data.content||[]).find(c=>c.type==='text');
+  return block ? block.text : '(No response — please try again.)';
+}
+
+/* ---------------- render root ---------------- */
+async function init(){
+  if(!AUTH_TOKEN){ showAuthScreen('login'); return; }
+  try{
+    state.user = await api.get('/api/me');
+  }catch(e){ return; }
+  if(state.user.status!=='active'){ showPendingScreen(state.user.status==='expired'?'expired':''); return; }
+  try{
+    state.settings = {...state.settings, ...(await api.get('/api/settings'))};
+    state.accounts = await api.get('/api/accounts');
+    state.expenses = await api.get('/api/expenses');
+    state.ocmSeen = await api.get('/api/ocm-seen');
+    state.weekPlan = await api.get('/api/week-plan');
+    state.routeLog = await api.get('/api/route-log');
+    state.credits = await api.get('/api/credits');
+    state.messages = await api.get('/api/messages');
+  }catch(e){
+    if((e.message||'').includes('unauthorized')||(e.message||'').includes('inactive')) return;
+    console.error('init load failed', e);
+  }
+  render();
+}
+
+/* persist a message to the shared ledger so other apps can read it cross-app */
+async function logMessage(acc, channel, purpose, body, to){
+  const entry = {
+    id:'msg'+Date.now(), accountId:acc.id, accountName:acc.name, licenseNumber:acc.licenseNumber||'',
+    city:acc.city||'', channel, purpose:purpose||'', body:body||'', to:to||'', direction:'outbound',
+    date: new Date().toISOString()
+  };
+  await api.post('/api/messages', entry);
+  setState({ messages:[...state.messages, entry] });
+  return entry;
+}
+
+/* credit balance per account from the ledger */
+function creditBalance(accountId){
+  return state.credits.filter(c=>c.accountId===accountId).reduce((s,c)=>s+Number(c.amount||0),0);
+}
+/* add credits to a client account: records a ledger entry and drafts an alert email */
+async function addCredits(accountId, amount, note){
+  const acc = state.accounts.find(a=>a.id===accountId);
+  if(!acc) return;
+  amount = Number(amount)||0;
+  if(!amount){ showToast('Enter a credit amount.'); return; }
+  const date = new Date().toISOString().slice(0,10);
+  const entry = { id:'cr'+Date.now(), accountId, accountName:acc.name, licenseNumber:acc.licenseNumber||'', city:acc.city||'', amount, note:note||'', date };
+  await api.post('/api/credits', entry);
+  setState({ credits:[...state.credits, entry] });
+  state.lastCreditDraft = creditEmail(entry, creditBalance(accountId));
+  showToast(`Added ${amount} credits to ${acc.name}. New balance: ${creditBalance(accountId)}.`);
+}
+function creditEmail(entry, balance){
+  const to = state.settings.alertEmail || '(set marketing email in Settings)';
+  return `To: ${to}
+Subject: Credits added — ${entry.accountName}
+
+${entry.amount} credits were added to ${entry.accountName}${entry.city?` (${entry.city})`:''} on ${entry.date}.${entry.note?`
+Reason: ${entry.note}`:''}
+New account balance: ${balance} credits.${entry.licenseNumber?`
+OCM license: ${entry.licenseNumber}`:''}
+
+Logged from Territory HQ.`;
+}
+
+/* helper to persist the whole week-plan object */
+async function saveWeekPlan(){ await api.put('/api/week-plan', state.weekPlan); }
+
+/* complete a route: stamp visits, log mileage expense, append to route log */
+async function completeRoute(date, day, stops, miles, minutes){
+  let accounts = [...state.accounts];
+  for(const stop of stops){
+    const acc = accounts.find(a=>a.id===stop.id);
+    if(!acc) continue;
+    const updated = {...acc, lastVisited:date};
+    await api.put('/api/accounts/'+acc.id, updated);
+    accounts = accounts.map(a=>a.id===acc.id?updated:a);
+  }
+  const names = stops.map(s=>s.name).join(', ');
+  const expense = { id:'e'+Date.now(), date, category:'Mileage', amount:0, miles: Math.round((miles||0)*10)/10, notes:`Route ${day} ${date}: ${names}` };
+  await api.post('/api/expenses', expense);
+  const logEntry = { id:'log'+Date.now(), date, day, stops, miles:miles||0, minutes:minutes||0 };
+  await api.post('/api/route-log', logEntry);
+  setState({ accounts, expenses:[...state.expenses, expense], routeLog:[...state.routeLog, logEntry] });
+}
+
+/* set a single account's day for the current week */
+async function setPlanDay(accountId, day){
+  const wk = currentWeekKey();
+  const plan = {...(state.weekPlan[wk]||{})};
+  if(day) plan[accountId] = day; else delete plan[accountId];
+  const weekPlan = {...state.weekPlan, [wk]:plan};
+  setState({weekPlan});
+  await saveWeekPlan();
+}
+
+function render(){
+  const app = document.getElementById('app');
+  const newCount = state.ocmResults.filter(r=>!state.ocmSeen.includes(r.license_number)).length;
+  const reviewCount = pendingReviews().length;
+  app.innerHTML = `
+    <nav>
+      <div class="brand"><span class="dot"></span><h1>Territory HQ</h1><br><span>field sales console</span></div>
+      ${navBtn('dashboard','Dashboard','🏠', reviewCount>0?reviewCount:null)}
+      ${navBtn('accounts','Accounts','🧾')}
+      ${navBtn('ocm','OCM Watch','🛰️', newCount>0?newCount:null)}
+      ${navBtn('route','Weekly Route','🗺️')}
+      ${navBtn('log','Route Log','📓')}
+      ${navBtn('marketing','Credits','💳')}
+      ${navBtn('reports','Reports','📊')}
+      ${navBtn('messages','Messages','✉️')}
+      ${navBtn('expenses','Expenses','💵')}
+      ${navBtn('settings','Settings','⚙️')}
+      ${state.user&&state.user.role==='admin'?navBtn('admin','Admin','🛡️'):''}
+      <button class="tab" id="logoutBtn"><span class="tabIcon">🚪</span><span class="tabLabel">Sign out</span></button>
+    </nav>
+    <main id="main"></main>
+    ${state.toast?`<div class="toast">${esc(state.toast)}</div>`:''}
+  `;
+  bindNav();
+  const main = document.getElementById('main');
+  if(state.tab==='dashboard') main.innerHTML = renderDashboard();
+  if(state.tab==='accounts') main.innerHTML = renderAccounts();
+  if(state.tab==='ocm') main.innerHTML = renderOCM();
+  if(state.tab==='route') main.innerHTML = renderRoute();
+  if(state.tab==='log') main.innerHTML = renderLog();
+  if(state.tab==='marketing') main.innerHTML = renderCredits();
+  if(state.tab==='reports') main.innerHTML = renderReports();
+  if(state.tab==='messages') main.innerHTML = renderMessages();
+  if(state.tab==='expenses') main.innerHTML = renderExpenses();
+  if(state.tab==='settings') main.innerHTML = renderSettings();
+  if(state.tab==='admin') main.innerHTML = renderAdmin();
+  postRenderHooks();
+}
+function navBtn(id,label,icon,badge){
+  return `<button class="tab ${state.tab===id?'active':''}" data-tab="${id}"><span class="tabIcon">${icon}</span><span class="tabLabel">${label}</span>${badge?`<span class="badge">${badge}</span>`:''}</button>`;
+}
+function bindNav(){
+  document.querySelectorAll('nav .tab').forEach(b=>{ if(b.dataset.tab) b.onclick=()=>setState({tab:b.dataset.tab}); });
+  const lb=document.getElementById('logoutBtn'); if(lb) lb.onclick=logout;
+}
+function esc(s){ return (s||'').toString().replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* ---------------- recommendations + review queue ---------------- */
+function daysSince(dateStr){
+  if(!dateStr) return Infinity;
+  const d = new Date(dateStr+'T00:00:00');
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+// accounts that were scheduled on a past day this/last weeks but never logged as a completed route
+function pendingReviews(){
+  const scheduledKeys = new Set();
+  // any (week, day) in the plan whose calendar date is strictly before today and not already in routeLog
+  const loggedDates = new Set(state.routeLog.map(l=>l.date));
+  const out = [];
+  const dayIdx = {Mon:0,Tue:1,Wed:2,Thu:3,Fri:4,Sat:5,Sun:6};
+  Object.entries(state.weekPlan||{}).forEach(([wk, plan])=>{
+    // group accounts by day
+    const byDay = {};
+    Object.entries(plan).forEach(([accId,day])=>{ (byDay[day]=byDay[day]||[]).push(accId); });
+    Object.entries(byDay).forEach(([day, accIds])=>{
+      const date = dateOfWeekDay(wk, day);
+      if(!date) return;
+      const todayStr = new Date().toISOString().slice(0,10);
+      if(date < todayStr && !loggedDates.has(date)){
+        out.push({ week:wk, day, date, accountIds:accIds });
+      }
+    });
+  });
+  return out.sort((a,b)=>a.date.localeCompare(b.date));
+}
+// convert "2026-W27" + "Wed" into an ISO date
+function dateOfWeekDay(wk, day){
+  const m = wk.match(/^(\d{4})-W(\d{2})$/); if(!m) return null;
+  const year = +m[1], week = +m[2];
+  const dayIdx = {Mon:0,Tue:1,Wed:2,Thu:3,Fri:4,Sat:5,Sun:6}[day];
+  if(dayIdx==null) return null;
+  const jan4 = new Date(Date.UTC(year,0,4));
+  const jan4Day = (jan4.getUTCDay()+6)%7;
+  const week1Mon = new Date(jan4); week1Mon.setUTCDate(jan4.getUTCDate()-jan4Day);
+  const target = new Date(week1Mon); target.setUTCDate(week1Mon.getUTCDate() + (week-1)*7 + dayIdx);
+  return target.toISOString().slice(0,10);
+}
+function recommendations(){
+  const recs = [];
+  state.accounts.forEach(a=>{
+    const ds = daysSince(a.lastVisited);
+    const scheduledThisWeek = !!currentPlan()[a.id];
+    if(scheduledThisWeek) return;
+    let reason = null, weight = 0;
+    if(a.status==='Active' && ds>=28){ reason=`Active account, no visit in ${ds===Infinity?'ever':ds+' days'}`; weight=ds; }
+    else if(a.status==='Prospect' && ds===Infinity){ reason='New prospect never visited'; weight=25; }
+    else if(a.status==='Tracking' && ds>=30){ reason=`Tracking account gone quiet (${ds}d)`; weight=ds-10; }
+    else if(ds>=45){ reason=`No visit in ${ds===Infinity?'ever':ds+' days'}`; weight=ds; }
+    const note = (a.notes||'').toLowerCase();
+    if(/follow.?up|circle back|call back|check in|reorder/.test(note)){ reason = reason||'Notes flag a follow-up'; weight += 15; }
+    if(reason) recs.push({account:a, reason, weight});
+  });
+  return recs.sort((x,y)=>y.weight-x.weight).slice(0,8);
+}
+
+/* ---------------- DASHBOARD ---------------- */
+function renderDashboard(){
+  const wk = currentWeekKey();
+  const plan = currentPlan();
+  const today = new Date().toLocaleDateString('en-US',{weekday:'short'});
+  const plannedCount = Object.keys(plan).length;
+  const todaysStops = state.accounts.filter(a=>plan[a.id]===today);
+  const thisMonth = new Date().toISOString().slice(0,7);
+  const monthSpend = state.expenses.filter(e=>e.date?.startsWith(thisMonth)).reduce((s,e)=>s+Number(e.amount||0),0);
+  const newCount = state.ocmResults.filter(r=>!state.ocmSeen.includes(r.license_number)).length;
+  const reviews = pendingReviews();
+  const recs = recommendations();
+
+  let reviewHtml = '';
+  if(reviews.length){
+    reviewHtml = `<h2 class="section">⚠️ Routes to review & approve</h2>
+      <div class="muted" style="margin-bottom:10px;">These days were planned but not yet logged. Approve to record the visits, stamp last-visit dates, and log mileage.</div>
+      ${reviews.map(rv=>{
+        const accts = rv.accountIds.map(id=>state.accounts.find(a=>a.id===id)).filter(Boolean);
+        return `<div class="card" style="margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div><b>${rv.day}, ${rv.date}</b> <span class="muted">— ${accts.length} planned stop(s)</span></div>
+            <div>
+              <button class="ghost small" data-skipreview="${rv.date}">Dismiss</button>
+              <button class="primary small" data-approve="${rv.date}">Approve & log</button>
+            </div>
+          </div>
+          <div style="margin-top:8px;">${accts.map(a=>`<label style="display:flex;align-items:center;gap:8px;margin:4px 0;font-size:13px;color:var(--text);"><input type="checkbox" class="reviewChk" data-rvdate="${rv.date}" data-acct="${a.id}" checked style="width:auto;"> ${esc(a.name)} <span class="muted">${esc(a.city||'')}</span></label>`).join('')}</div>
+        </div>`;
+      }).join('')}`;
+  }
+
+  let recHtml = '';
+  if(recs.length){
+    recHtml = `<h2 class="section">Recommended stops to schedule</h2>
+      <div class="muted" style="margin-bottom:10px;">Based on time since last visit, status, and your notes. Tap to add to this week.</div>
+      ${recs.map(r=>`<div class="card" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div><b>${esc(r.account.name)}</b> <span class="pill ${r.account.status.toLowerCase().replace(' ','')}">${r.account.status}</span><div class="muted" style="margin-top:2px;">${esc(r.reason)}</div></div>
+        <select data-recassign="${r.account.id}" style="width:auto;">
+          <option value="">Add to day…</option>
+          ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option value="${d}">${d}</option>`).join('')}
+        </select>
+      </div>`).join('')}`;
+  }
+
+  return `
+    <h2 class="disp" style="font-size:22px;margin-bottom:2px;">Good to see you.</h2>
+    <div class="muted" style="margin-bottom:18px;">${new Date().toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric'})} · Week ${wk}</div>
+    <div class="cards4">
+      <div class="card stat"><div class="num">${state.accounts.length}</div><div class="lbl">Tracked accounts</div></div>
+      <div class="card stat"><div class="num">${plannedCount}</div><div class="lbl">Planned this week</div></div>
+      <div class="card stat"><div class="num">${todaysStops.length}</div><div class="lbl">Stops today (${today})</div></div>
+      <div class="card stat"><div class="num">${newCount}</div><div class="lbl">New OCM stores</div></div>
+    </div>
+    ${reviewHtml}
+    ${recHtml}
+    <h2 class="section">This month</h2>
+    <div class="row">
+      <div class="card" style="flex:1;min-width:220px;"><div class="muted">Expenses logged</div><div style="font-size:22px;font-weight:700;margin-top:4px;" class="disp">$${monthSpend.toFixed(2)}</div></div>
+      <div class="card" style="flex:1;min-width:220px;"><div class="muted">Routes completed (all time)</div><div style="font-size:22px;font-weight:700;margin-top:4px;" class="disp">${state.routeLog.length}</div></div>
+    </div>
+  `;
+}
+
+/* ---------------- ACCOUNTS ---------------- */
+function renderAccounts(){
+  let rows = [...state.accounts];
+  if(state.acctSort==='overdue'){
+    rows.sort((a,b)=>daysSince(b.lastVisited)-daysSince(a.lastVisited));
+  }
+  const plan = currentPlan();
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <h2 class="disp" style="font-size:20px;">Accounts</h2>
+      <div>
+        <button class="ghost" id="sortToggleBtn">${state.acctSort==='overdue'?'Sorted: needs a visit first':'Sort by last visit'}</button>
+        <button class="primary" id="newAcctBtn">+ New account</button>
+      </div>
+    </div>
+    <div class="muted" style="margin:6px 0 14px;">The <b>This week</b> column sets each account's visit day for the current week (${currentWeekKey()}). It resets to a blank plan each new week; past weeks are kept in the Route Log.</div>
+    ${rows.length===0?`<div class="empty">No accounts yet. Add one manually, or pull candidates from OCM Watch.</div>`:`
+    <table>
+      <tr><th>Name</th><th>Status</th><th>This week</th><th>Priority</th><th>City</th><th>Last visit</th><th></th></tr>
+      ${rows.map(a=>{
+        const ds = daysSince(a.lastVisited);
+        const overdue = ds === Infinity || ds >= 21;
+        const visitLabel = a.lastVisited ? `${a.lastVisited} (${ds}d ago)` : 'Never';
+        const planned = plan[a.id]||'';
+        return `
+        <tr>
+          <td data-label="Name"><b>${esc(a.name)}</b>${a.dba?`<div class="muted">${esc(a.dba)}</div>`:''}${a.licenseNumber?`<div class="muted mono" style="font-size:11px;">${esc(a.licenseNumber)}</div>`:''}</td>
+          <td data-label="Status"><span class="pill ${a.status.toLowerCase().replace(' ','')}">${a.status}</span></td>
+          <td data-label="This week"><select data-planday="${a.id}" style="width:auto;min-width:110px;">
+            <option value="">— not this week —</option>
+            ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<option value="${d}" ${planned===d?'selected':''}>${d}</option>`).join('')}
+          </select></td>
+          <td data-label="Priority">${a.priority?`<span class="priority">★ ${a.priorityRank||1}</span>`:'—'}</td>
+          <td data-label="City">${esc(a.city)}</td>
+          <td data-label="Last visit">${overdue?`<span style="color:var(--amber);font-weight:600;">${esc(visitLabel)}</span>`:esc(visitLabel)}</td>
+          <td data-label=""><button class="ghost small" data-edit="${a.id}">Edit</button></td>
+        </tr>`;}).join('')}
+    </table>`}
+  `;
+}
+function accountModal(existing){
+  const a = existing || {id:'a'+Date.now(), name:'',dba:'',address:'',city:'',county:'',phone:'',email:'',contactName:'',status:'Prospect',priority:false,priorityRank:1,notes:'',lat:null,lng:null,source:'manual',lastVisited:null,licenseNumber:''};
+  const counties = ['Albany','Bronx','Broome','Erie','Kings','Nassau','New York','Onondaga','Orange','Queens','Richmond','Suffolk','Westchester'];
+  return `
+  <div class="modalBg" id="acctModalBg"><div class="modal">
+    <button class="closeX" id="acctClose">✕</button>
+    <h3 class="disp">${existing?'Edit account':'New account'}</h3>
+    <form id="acctForm">
+      <label>OCM license number ${existing?'':'<span class="muted">(the unique ID for this client — required)</span>'}</label>
+      <input name="licenseNumber" value="${esc(a.licenseNumber||'')}" placeholder="e.g. OCM-RD-0001" ${existing&&a.source==='ocm'?'readonly style="opacity:.7;"':''} required>
+      <div id="dupWarning" class="muted" style="color:var(--red);display:none;margin-top:4px;">An account with this license number already exists.</div>
+      <div class="grid2" style="margin-top:10px;">
+        <div><label>Store / business name</label><input name="name" value="${esc(a.name)}" required></div>
+        <div><label>DBA (if different)</label><input name="dba" value="${esc(a.dba)}"></div>
+      </div>
+      <label>Street address</label><input name="address" value="${esc(a.address)}" placeholder="123 Main St" required>
+      <div class="grid2">
+        <div><label>City</label><input name="city" value="${esc(a.city)}"></div>
+        <div><label>County</label><input name="county" value="${esc(a.county)}" list="countyList">
+          <datalist id="countyList">${counties.map(c=>`<option value="${c}">`).join('')}</datalist>
+        </div>
+      </div>
+      <div class="grid2">
+        <div><label>Contact name</label><input name="contactName" value="${esc(a.contactName)}"></div>
+        <div><label>Status</label>
+          <select name="status">
+            ${['Prospect','Active','Tracking','Inactive'].map(s=>`<option ${a.status===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div><label>Phone</label><input name="phone" value="${esc(a.phone)}"></div>
+        <div><label>Email</label><input name="email" value="${esc(a.email)}"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Priority override</label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:0;"><input type="checkbox" name="priority" style="width:auto;" ${a.priority?'checked':''}> Force early in route
+          <input type="number" name="priorityRank" min="1" max="9" value="${a.priorityRank||1}" style="width:55px;margin-left:6px;" title="1 = visit first"></label>
+        </div>
+        <div></div>
+      </div>
+      <label>Notes</label><textarea name="notes" rows="3">${esc(a.notes)}</textarea>
+      ${existing?`<div class="card" style="margin-top:12px;background:var(--panel2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div><b>Credit balance</b><div class="muted">${creditBalance(existing.id)} credits on this client's account</div></div>
+          <button type="button" class="primary small" id="acctCredits">💳 Add credits</button>
+        </div>
+      </div>`:''}
+      <div class="flexEnd">
+        ${existing?'<button type="button" class="ghost" id="acctDelete" style="color:var(--red);border-color:#4a2222;">Delete</button>':''}
+        <button type="button" class="ghost" id="acctCancel">Cancel</button>
+        <button type="submit" class="primary">Save & locate on map</button>
+      </div>
+    </form>
+  </div></div>`;
+}
+
+/* ---------------- OCM WATCH ---------------- */
+function renderOCM(){
+  const seen = new Set(state.ocmSeen);
+  const addedLicenses = new Set(state.accounts.map(a=>a.licenseNumber).filter(Boolean));
+  const results = state.ocmResults.filter(r=>!addedLicenses.has(r.license_number));
+  const searchResults = state.ocmSearchResults;
+  const mode = state.ocmSearchMode || 'license';
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2 class="disp" style="font-size:20px;">OCM Watch</h2>
+      <div>
+        <button class="ghost" id="markSeenBtn">Mark all seen</button>
+        <button class="primary" id="checkOcmBtn">${state.ocmLoading?'Checking…':'Check OCM database now'}</button>
+      </div>
+    </div>
+    <div class="muted" style="margin:8px 0 16px;max-width:640px;">
+      Live pull from New York's Open Data <b>Current OCM Licenses</b> dataset, filtered to your counties in Settings.
+      Already-added accounts are hidden automatically. This checks the moment you press the button — it can't push
+      notifications while the app is closed, since that needs a server running on a schedule.
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-weight:600;margin-bottom:8px;">Search OCM directly</div>
+      <div class="muted" style="margin-bottom:8px;">Looks up any store by license number or name — ignores your county filter.</div>
+      <div style="margin-bottom:8px;">
+        <span class="dayChip ${mode==='license'?'on':''}" data-searchmode="license">License #</span>
+        <span class="dayChip ${mode==='name'?'on':''}" data-searchmode="name">Name</span>
+      </div>
+      <div class="row">
+        <input id="ocmSearchInput" placeholder="${mode==='name'?'e.g. Green Leaf':'e.g. OCM-RD-0001'}" style="flex:1;min-width:180px;">
+        <button class="primary" id="ocmSearchBtn" style="width:auto;">${state.ocmSearchLoading?'Searching…':'Search'}</button>
+      </div>
+      ${state.ocmSearchError?`<div class="muted" style="color:var(--red);margin-top:8px;">${esc(state.ocmSearchError)}</div>`:''}
+      ${searchResults?searchResults.map(sr=>{
+        const already = state.accounts.find(a=>a.licenseNumber===sr.license_number);
+        return `<div class="stopRow">
+          <div class="stopNum">${already?'✓':'•'}</div>
+          <div style="flex:1;">
+            <b>${esc(sr.dba||sr.entity_name)}</b> <span class="muted mono" style="font-size:11px;">${esc(sr.license_number)}</span>
+            <div class="muted">${esc(sr.address_line_1)}, ${esc(sr.city)} — ${esc(sr.license_status)}</div>
+          </div>
+          ${already
+            ? `<span class="muted">Already added as ${esc(already.name)}</span>`
+            : `<button class="ghost small" data-addocmsearch="${esc(sr.license_number)}">Add to accounts</button>`}
+        </div>`;
+      }).join(''):''}
+    </div>
+
+    ${state.ocmError?`<div class="card" style="border-color:var(--red);color:var(--red);margin-bottom:14px;">${esc(state.ocmError)}</div>`:''}
+    ${!state.settings.counties.length ? `<div class="empty">Set at least one county to watch in Settings first.</div>` :
+      results.length===0 ? `<div class="empty">Press "Check OCM database now" to pull current retail licenses for your counties.</div>` :
+      `<table>
+        <tr><th></th><th>Name</th><th>Status</th><th>County</th><th>Address</th><th>Opened to public</th><th></th></tr>
+        ${results.map(r=>`
+          <tr>
+            <td data-label="">${!seen.has(r.license_number)?'<span class="newTag">NEW</span>':''}</td>
+            <td data-label="Name"><b>${esc(r.dba||r.entity_name)}</b><div class="muted mono" style="font-size:11px;">${esc(r.license_number)}</div></td>
+            <td data-label="Status">${esc(r.license_status)}</td>
+            <td data-label="County">${esc(r.county)}</td>
+            <td data-label="Address">${esc(r.address_line_1)}, ${esc(r.city)}</td>
+            <td data-label="Opened">${esc(r.retail_date_opened_to_public||'—')}</td>
+            <td data-label=""><button class="ghost small" data-addocm="${esc(r.license_number)}">Add to accounts</button></td>
+          </tr>`).join('')}
+      </table>`}
+  `;
+}
+
+/* ---------------- ROUTE ---------------- */
+function renderRoute(){
+  const day = state.routeDay || state.settings.workDays[0] || 'Mon';
+  const plan = currentPlan();
+  const dayStops = state.accounts.filter(a=>plan[a.id]===day);
+  const home = state.settings.homeLat!=null ? {lat:state.settings.homeLat,lng:state.settings.homeLng} : null;
+  const usingGoogle = !!state.settings.gmapsKey;
+  const r = state.routeResult;
+
+  let body = '';
+  if(!home){
+    body = `<div class="empty">Set and locate your home address in Settings first.</div>`;
+  } else if(dayStops.length===0){
+    body = `<div class="empty">Nothing planned for ${day} this week. Add stops below or from the Accounts tab.</div>`;
+  } else {
+    body = `<div class="flexEnd" style="justify-content:flex-start;margin-bottom:14px;">
+      <button class="primary" id="optimizeBtn">${state.routeLoading?'Optimizing…':(usingGoogle?'Optimize with Google Maps':'Optimize route (straight-line)')}</button>
+    </div>`;
+    if(state.routeError) body += `<div class="card" style="border-color:var(--red);color:var(--red);margin-bottom:14px;">${esc(state.routeError)}</div>`;
+    if(!(r && r.day===day)){
+      // PREVIEW: show the day's planned stops and their locations before optimizing
+      const located = dayStops.filter(s=>s.lat!=null);
+      const unlocated = dayStops.filter(s=>s.lat==null);
+      body += `<div class="row">
+        <div class="card" style="flex:2;min-width:340px;">
+          <div style="font-weight:600;margin-bottom:8px;">${dayStops.length} stop(s) planned for ${day} — not yet optimized</div>
+          <div class="stopRow"><div class="stopNum">H</div><div><b>Home</b><div class="muted">${esc(state.settings.homeAddress)}</div></div></div>
+          ${dayStops.map(s=>`<div class="stopRow">
+            <div class="stopNum">${s.priority?'★':'•'}</div>
+            <div style="flex:1;"><b>${esc(s.name)}</b><div class="muted">${esc(s.address)}, ${esc(s.city)}${s.lat==null?' — ⚠️ no location found':''}</div></div>
+          </div>`).join('')}
+          ${unlocated.length?`<div class="muted" style="margin-top:8px;">${unlocated.length} stop(s) have no location and will be skipped until re-saved in Accounts.</div>`:''}
+          <div class="muted" style="margin-top:10px;">Press <b>Optimize</b> to compute the best driving order.</div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px;padding:0;overflow:hidden;">
+          ${usingGoogle ? `<div id="previewMap" style="width:100%;height:340px;"></div>` : `<canvas id="previewCanvas" width="280" height="320"></canvas><div class="muted" style="margin:8px;">Stop locations — add a Google Maps key in Settings for a real map.</div>`}
+        </div>
+      </div>`;
+    }
+    if(r && r.day===day){
+      body += `<div class="row">
+        <div class="card" style="flex:2;min-width:340px;">
+          <div class="stopRow"><div class="stopNum">H</div><div><b>Home</b><div class="muted">${esc(state.settings.homeAddress)}</div></div></div>
+          ${r.legs.map((s,i)=>`
+            <div class="stopRow">
+              <div class="stopNum">${s.isHome?'H':i+1}</div>
+              <div style="flex:1;">
+                <b>${s.isHome?'Back home':esc(s.name)}</b> ${s.priority?'<span class="priority">★</span>':''}
+                <div class="muted">${s.isHome?'':esc(s.address)+', '+esc(s.city)+' — '}${s.distanceText||''}${s.durationText?' · '+s.durationText:''}</div>
+              </div>
+            </div>`).join('')}
+          <div style="margin-top:14px;font-weight:600;">Total: <span class="disp" style="color:var(--amber);">${r.totalMiles.toFixed(1)} mi</span>${r.totalMinutes?` · <span class="disp" style="color:var(--amber);">${Math.round(r.totalMinutes)} min drive time</span>`:''}</div>
+          <div style="margin-top:10px;"><a href="${gmapsUrl(state.settings, r.legs.filter(l=>!l.isHome))}" target="_blank">Open this route in Google Maps →</a></div>
+          ${r.skipped.length?`<div class="muted" style="margin-top:10px;">${r.skipped.length} stop(s) skipped — no location found. Re-save them in Accounts to geocode.</div>`:''}
+          ${r.engine==='straight-line'?`<div class="muted" style="margin-top:10px;">Using straight-line distance. Add a Google Maps API key in Settings for real driving routes and times.</div>`:''}
+          <div class="flexEnd" style="justify-content:flex-start;margin-top:14px;">
+            <button class="primary" id="markVisitedBtn">${state.visitLoading?'Logging…':'Complete route → log visits & mileage'}</button>
+          </div>
+          <div class="muted" style="margin-top:6px;">Records this route in the Route Log, stamps today's visit date on each stop, and adds a ${r.totalMiles.toFixed(1)} mi Mileage expense.</div>
+        </div>
+        <div class="card" style="flex:1;min-width:280px;padding:0;overflow:hidden;">
+          ${usingGoogle ? `<div id="gmap" style="width:100%;height:340px;"></div>` : `<canvas id="mapCanvas" width="280" height="320"></canvas><div class="muted" style="margin:8px;">Straight-line schematic — add a Google Maps key in Settings for a real map.</div>`}
+        </div>
+      </div>`;
+    }
+  }
+
+  const others = state.accounts.filter(a=>plan[a.id]!==day);
+  const quickAssign = `
+    <h2 class="section">Add accounts to ${day} (this week)</h2>
+    ${others.length===0?`<div class="muted">Every account is already on ${day} this week.</div>`:`
+    <div class="row">
+      ${others.map(a=>`<span class="countyChip" data-quickday="${a.id}">+ ${esc(a.name)}${plan[a.id]?` <span class="muted">(${plan[a.id]})</span>`:''}</span>`).join('')}
+    </div>`}
+  `;
+
+  const dayCounts = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>{
+    const n = state.accounts.filter(a=>plan[a.id]===d).length;
+    return `<span class="dayChip ${day===d?'on':''}" data-day="${d}">${d}${n?` · ${n}`:''}</span>`;
+  }).join('');
+
+  return `
+    <h2 class="disp" style="font-size:20px;">Weekly route <span class="muted" style="font-size:13px;">${currentWeekKey()}</span></h2>
+    <div class="muted" style="margin-bottom:14px;max-width:620px;">${usingGoogle?'Optimized with live Google driving directions.':'Optimized with straight-line distance — add a Google Maps API key in Settings for real driving routes.'} Reads this week's plan from Accounts. Priority-override accounts are always visited first.</div>
+    <div style="margin-bottom:16px;">${dayCounts}</div>
+    ${body}
+    ${quickAssign}
+  `;
+}
+const darkMapStyle = [{elementType:'geometry',stylers:[{color:'#171a21'}]},{elementType:'labels.text.fill',stylers:[{color:'#8b909c'}]},{elementType:'labels.text.stroke',stylers:[{color:'#0f1115'}]},{featureType:'road',elementType:'geometry',stylers:[{color:'#2a2f3a'}]},{featureType:'water',elementType:'geometry',stylers:[{color:'#0f1115'}]}];
+function drawPreviewCanvas(home, stops){
+  const c = document.getElementById('previewCanvas'); if(!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  const pts = [home, ...stops.map(o=>({lat:o.lat,lng:o.lng}))];
+  const lats = pts.map(p=>p.lat), lngs = pts.map(p=>p.lng);
+  const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
+  const pad=30;
+  const toXY = p => {
+    const x = maxLng===minLng ? c.width/2 : pad + (p.lng-minLng)/(maxLng-minLng)*(c.width-2*pad);
+    const y = maxLat===minLat ? c.height/2 : (c.height-pad) - (p.lat-minLat)/(maxLat-minLat)*(c.height-2*pad);
+    return [x,y];
+  };
+  // home marker (green)
+  const [hx,hy]=toXY(home);
+  ctx.fillStyle='#3ecf8e'; ctx.beginPath(); ctx.arc(hx,hy,6,0,7); ctx.fill();
+  ctx.fillStyle='#e8e9ec'; ctx.font='10px sans-serif'; ctx.fillText('Home',hx+8,hy+3);
+  // stop markers (amber, numbered) — no connecting line since not optimized yet
+  stops.forEach((s,i)=>{
+    const [x,y]=toXY({lat:s.lat,lng:s.lng});
+    ctx.fillStyle='#ffb020'; ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.fill();
+    ctx.fillStyle='#1a1305'; ctx.font='bold 8px sans-serif'; ctx.textAlign='center'; ctx.fillText(String(i+1),x,y+3); ctx.textAlign='start';
+  });
+}
+function drawMap(home, ordered){
+  const c = document.getElementById('mapCanvas'); if(!c) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  const pts = [home, ...ordered.map(o=>({lat:o.lat,lng:o.lng}))];
+  const lats = pts.map(p=>p.lat), lngs = pts.map(p=>p.lng);
+  const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
+  const pad=30;
+  const toXY = p => {
+    const x = maxLng===minLng ? c.width/2 : pad + (p.lng-minLng)/(maxLng-minLng)*(c.width-2*pad);
+    const y = maxLat===minLat ? c.height/2 : (c.height-pad) - (p.lat-minLat)/(maxLat-minLat)*(c.height-2*pad);
+    return [x,y];
+  };
+  ctx.strokeStyle = '#ffb020aa'; ctx.lineWidth=1.5; ctx.beginPath();
+  const full = [home, ...ordered, home];
+  full.forEach((p,i)=>{ const [x,y]=toXY(p); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.stroke();
+  full.forEach((p,i)=>{
+    const [x,y]=toXY(p);
+    ctx.fillStyle = i===0 || i===full.length-1 ? '#3ecf8e' : '#ffb020';
+    ctx.beginPath(); ctx.arc(x,y,i===0||i===full.length-1?6:5,0,7); ctx.fill();
+  });
+}
+function drawGoogleMap(home, renderResults){
+  const el = document.getElementById('gmap'); if(!el || !window.google) return;
+  const map = new google.maps.Map(el, { center:home, zoom:9, disableDefaultUI:true, styles:darkMapStyle });
+  renderResults.forEach((res,i)=>{
+    const renderer = new google.maps.DirectionsRenderer({ map, directions:res, suppressMarkers:false, polylineOptions:{ strokeColor:'#ffb020', strokeWeight:4 } });
+  });
+}
+
+/* ---------------- ROUTE LOG ---------------- */
+function renderLog(){
+  const logs = [...state.routeLog].sort((a,b)=>b.date.localeCompare(a.date));
+  return `
+    <h2 class="disp" style="font-size:20px;">Route log</h2>
+    <div class="muted" style="margin-bottom:14px;">Every completed route, kept permanently. ${logs.length} record(s).</div>
+    ${logs.length===0?`<div class="empty">No completed routes yet. Optimize a route and hit "Complete route", or approve a pending day from the Dashboard.</div>`:`
+    <table>
+      <tr><th>Date</th><th>Day</th><th>Stops</th><th>Miles</th><th>Drive time</th></tr>
+      ${logs.map(l=>`
+        <tr>
+          <td data-label="Date"><b>${esc(l.date)}</b></td>
+          <td data-label="Day">${esc(l.day||'—')}</td>
+          <td data-label="Stops">${l.stops.map(s=>esc(s.name)).join(', ')}</td>
+          <td data-label="Miles">${(l.miles||0).toFixed(1)}</td>
+          <td data-label="Drive time">${l.minutes?Math.round(l.minutes)+' min':'—'}</td>
+        </tr>`).join('')}
+    </table>`}
+  `;
+}
+
+/* ---------------- REPORTS ---------------- */
+function periodRange(period, ref){
+  const now = ref ? new Date(ref) : new Date();
+  let start, end, label;
+  if(period==='day'){
+    start = new Date(now); start.setHours(0,0,0,0);
+    end = new Date(start); end.setDate(end.getDate()+1);
+    label = start.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  } else if(period==='week'){
+    const dow = (now.getDay()+6)%7;
+    start = new Date(now); start.setDate(now.getDate()-dow); start.setHours(0,0,0,0);
+    end = new Date(start); end.setDate(end.getDate()+7);
+    label = `Week of ${start.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+  } else if(period==='month'){
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth()+1, 1);
+    label = start.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  } else { // quarter
+    const q = Math.floor(now.getMonth()/3);
+    start = new Date(now.getFullYear(), q*3, 1);
+    end = new Date(now.getFullYear(), q*3+3, 1);
+    label = `Q${q+1} ${now.getFullYear()}`;
+  }
+  return { start, end, label, startStr:start.toISOString().slice(0,10), endStr:end.toISOString().slice(0,10) };
+}
+function renderReports(){
+  const period = state.reportPeriod || 'week';
+  const { startStr, endStr, label } = periodRange(period, state.reportRef);
+  const inRange = d => d && d>=startStr && d<endStr;
+
+  const logs = state.routeLog.filter(l=>inRange(l.date));
+  const visitsCompleted = logs.reduce((s,l)=>s+l.stops.length,0);
+  const milesDriven = logs.reduce((s,l)=>s+(l.miles||0),0);
+  const routesRun = logs.length;
+
+  const exp = state.expenses.filter(e=>inRange(e.date));
+  const totalSpend = exp.reduce((s,e)=>s+Number(e.amount||0),0);
+  const mileageReimb = exp.filter(e=>e.category==='Mileage').reduce((s,e)=>s+Number(e.miles||0)*state.settings.mileageRate,0);
+  const byCat = {};
+  exp.forEach(e=>{ byCat[e.category]=(byCat[e.category]||0)+Number(e.amount||0); });
+
+  const newStores = state.ocmResults.filter(r=>inRange(r.retail_date_opened_to_public));
+
+  const neglected = state.accounts.filter(a=>{ const ds=daysSince(a.lastVisited); return ds===Infinity||ds>=30; })
+    .sort((a,b)=>daysSince(b.lastVisited)-daysSince(a.lastVisited));
+
+  const uniqueVisited = new Set();
+  logs.forEach(l=>l.stops.forEach(s=>uniqueVisited.add(s.id)));
+
+  // credits in range
+  const creditsInRange = state.credits.filter(c=>inRange(c.date));
+  const creditsTotal = creditsInRange.reduce((s,c)=>s+Number(c.amount||0),0);
+  const creditsByClient = {};
+  creditsInRange.forEach(c=>{ creditsByClient[c.accountName]=(creditsByClient[c.accountName]||0)+Number(c.amount||0); });
+
+  // messages in range
+  const msgsInRange = state.messages.filter(m=>inRange((m.date||'').slice(0,10)));
+  const msgTexts = msgsInRange.filter(m=>m.channel==='text').length;
+  const msgEmails = msgsInRange.filter(m=>m.channel==='email').length;
+
+  // account status breakdown
+  const byStatus = {};
+  state.accounts.forEach(a=>{ byStatus[a.status]=(byStatus[a.status]||0)+1; });
+  const avgMiles = routesRun? milesDriven/routesRun : 0;
+
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <h2 class="disp" style="font-size:20px;">Reports</h2>
+      <div>
+        ${['day','week','month','quarter'].map(p=>`<span class="dayChip ${period===p?'on':''}" data-period="${p}">${p[0].toUpperCase()+p.slice(1)}</span>`).join('')}
+      </div>
+    </div>
+    <div class="muted" style="margin:6px 0 16px;">${label} · ${startStr} → ${endStr}</div>
+    <div class="cards4">
+      <div class="card stat"><div class="num">${routesRun}</div><div class="lbl">Routes run</div></div>
+      <div class="card stat"><div class="num">${visitsCompleted}</div><div class="lbl">Visits completed</div></div>
+      <div class="card stat"><div class="num">${milesDriven.toFixed(0)}</div><div class="lbl">Miles driven</div></div>
+      <div class="card stat"><div class="num">$${totalSpend.toFixed(0)}</div><div class="lbl">Total expenses</div></div>
+    </div>
+    <div class="cards4">
+      <div class="card stat"><div class="num">${creditsTotal}</div><div class="lbl">Credits issued</div></div>
+      <div class="card stat"><div class="num">${msgsInRange.length}</div><div class="lbl">Messages sent</div></div>
+      <div class="card stat"><div class="num">${newStores.length}</div><div class="lbl">New OCM stores</div></div>
+      <div class="card stat"><div class="num">${uniqueVisited.size}</div><div class="lbl">Clients visited</div></div>
+    </div>
+    <div class="row" style="margin-bottom:8px;">
+      <div class="card" style="flex:1;min-width:240px;">
+        <div class="muted" style="margin-bottom:6px;">Expenses by category</div>
+        ${Object.keys(byCat).length? Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;"><span>${esc(c)}</span><span>$${v.toFixed(2)}</span></div>`).join(''):'<div class="muted">None</div>'}
+        <div style="display:flex;justify-content:space-between;padding:6px 0 0;border-top:1px solid var(--line);margin-top:6px;font-weight:600;font-size:13px;"><span>Est. mileage reimbursement</span><span>$${mileageReimb.toFixed(2)}</span></div>
+      </div>
+      <div class="card" style="flex:1;min-width:240px;">
+        <div class="muted" style="margin-bottom:6px;">Activity</div>
+        <div style="font-size:13px;padding:3px 0;">Avg miles per route: <b>${avgMiles.toFixed(1)}</b></div>
+        <div style="font-size:13px;padding:3px 0;">Messages: <b>${msgTexts}</b> text, <b>${msgEmails}</b> email</div>
+        <div style="font-size:13px;padding:3px 0;">Credit entries: <b>${creditsInRange.length}</b></div>
+        <div style="font-size:13px;padding:3px 0;">Accounts neglected (30d+): <b style="color:var(--amber);">${neglected.length}</b></div>
+      </div>
+      <div class="card" style="flex:1;min-width:200px;">
+        <div class="muted" style="margin-bottom:6px;">Accounts by status</div>
+        ${Object.entries(byStatus).map(([s,n])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;"><span><span class="pill ${s.toLowerCase().replace(' ','')}">${s}</span></span><span>${n}</span></div>`).join('')}
+        <div style="display:flex;justify-content:space-between;padding:6px 0 0;border-top:1px solid var(--line);margin-top:6px;font-weight:600;font-size:13px;"><span>Total accounts</span><span>${state.accounts.length}</span></div>
+      </div>
+    </div>
+    ${routesRun?`<h2 class="section">Routes completed (${label})</h2>
+      <table><tr><th>Date</th><th>Day</th><th>Stops</th><th>Miles</th></tr>
+      ${logs.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(l=>`<tr><td data-label="Date">${esc(l.date)}</td><td data-label="Day">${esc(l.day||'')}</td><td data-label="Stops">${l.stops.map(s=>esc(s.name)).join(', ')}</td><td data-label="Miles">${(l.miles||0).toFixed(1)}</td></tr>`).join('')}
+      </table>`:''}
+    ${creditsInRange.length?`<h2 class="section">Credits issued (${label})</h2>
+      <table><tr><th>Date</th><th>Client</th><th>Amount</th><th>Reason</th></tr>
+      ${creditsInRange.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(c=>`<tr><td data-label="Date">${esc(c.date)}</td><td data-label="Client">${esc(c.accountName)}</td><td data-label="Amount">${c.amount}</td><td data-label="Reason" class="muted">${esc(c.note||'')}</td></tr>`).join('')}
+      </table>`:''}
+    ${msgsInRange.length?`<h2 class="section">Messages sent (${label})</h2>
+      <table><tr><th>Date</th><th>Client</th><th>Channel</th><th>Message</th></tr>
+      ${msgsInRange.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(m=>`<tr><td data-label="Date">${esc((m.date||'').slice(0,10))}</td><td data-label="Client">${esc(m.accountName)}</td><td data-label="Channel">${esc(m.channel)}</td><td data-label="Message" class="muted">${esc((m.body||'').slice(0,60))}${(m.body||'').length>60?'…':''}</td></tr>`).join('')}
+      </table>`:''}
+    ${newStores.length?`<h2 class="section">New OCM stores opened (${label})</h2>
+      <table><tr><th>Name</th><th>County</th><th>Opened</th></tr>
+      ${newStores.map(r=>`<tr><td data-label="Name">${esc(r.dba||r.entity_name)}</td><td data-label="County">${esc(r.county)}</td><td data-label="Opened">${esc(r.retail_date_opened_to_public)}</td></tr>`).join('')}
+      </table>`:''}
+    ${neglected.length?`<h2 class="section">Most neglected accounts</h2>
+      <table><tr><th>Name</th><th>Status</th><th>Last visit</th></tr>
+      ${neglected.slice(0,12).map(a=>{const ds=daysSince(a.lastVisited);return `<tr><td data-label="Name">${esc(a.name)}</td><td data-label="Status"><span class="pill ${a.status.toLowerCase().replace(' ','')}">${a.status}</span></td><td data-label="Last visit"><span style="color:var(--amber);">${a.lastVisited?a.lastVisited+' ('+ds+'d)':'Never'}</span></td></tr>`;}).join('')}
+      </table>`:''}
+    <div class="flexEnd" style="justify-content:flex-start;margin-top:18px;gap:8px;"><button class="primary" id="pdfReportBtn">Export PDF</button><button class="ghost" id="copyReportBtn">Copy as text</button></div>
+  `;
+}
+function reportAsText(){
+  const period = state.reportPeriod || 'week';
+  const { startStr, endStr, label } = periodRange(period, state.reportRef);
+  const inRange = d => d && d>=startStr && d<endStr;
+  const logs = state.routeLog.filter(l=>inRange(l.date));
+  const visits = logs.reduce((s,l)=>s+l.stops.length,0);
+  const miles = logs.reduce((s,l)=>s+(l.miles||0),0);
+  const exp = state.expenses.filter(e=>inRange(e.date));
+  const spend = exp.reduce((s,e)=>s+Number(e.amount||0),0);
+  const newStores = state.ocmResults.filter(r=>inRange(r.retail_date_opened_to_public));
+  const credits = state.credits.filter(c=>inRange(c.date)).reduce((s,c)=>s+Number(c.amount||0),0);
+  const msgs = state.messages.filter(m=>inRange((m.date||'').slice(0,10))).length;
+  return `TERRITORY HQ REPORT — ${label} (${startStr} to ${endStr})
+Routes run: ${logs.length}
+Visits completed: ${visits}
+Miles driven: ${miles.toFixed(1)}
+Total expenses: $${spend.toFixed(2)}
+Credits issued: ${credits}
+Messages sent: ${msgs}
+New OCM stores opened: ${newStores.length}`;
+}
+function exportReportPDF(){
+  const period = state.reportPeriod || 'week';
+  const { startStr, endStr, label } = periodRange(period, state.reportRef);
+  const inRange = d => d && d>=startStr && d<endStr;
+  const logs = state.routeLog.filter(l=>inRange(l.date) && !l.dismissed);
+  const visits = logs.reduce((s,l)=>s+l.stops.length,0);
+  const miles = logs.reduce((s,l)=>s+(l.miles||0),0);
+  const exp = state.expenses.filter(e=>inRange(e.date));
+  const spend = exp.reduce((s,e)=>s+Number(e.amount||0),0);
+  const mileageReimb = exp.filter(e=>e.category==='Mileage').reduce((s,e)=>s+Number(e.miles||0)*state.settings.mileageRate,0);
+  const byCat = {}; exp.forEach(e=>{ byCat[e.category]=(byCat[e.category]||0)+Number(e.amount||0); });
+  const acts = state.credits.filter(a=>inRange(a.date));
+  const actCredits = acts.reduce((s,a)=>s+Number(a.amount||0),0);
+  const msgs = state.messages.filter(m=>inRange((m.date||'').slice(0,10)));
+  const msgTexts = msgs.filter(m=>m.channel==='text').length;
+  const msgEmails = msgs.filter(m=>m.channel==='email').length;
+  const byStatus = {}; state.accounts.forEach(a=>{ byStatus[a.status]=(byStatus[a.status]||0)+1; });
+  const newStores = state.ocmResults.filter(r=>inRange(r.retail_date_opened_to_public));
+  const neglected = state.accounts.filter(a=>{const ds=daysSince(a.lastVisited);return ds===Infinity||ds>=30;}).sort((a,b)=>daysSince(b.lastVisited)-daysSince(a.lastVisited));
+  const uniq = new Set(); logs.forEach(l=>l.stops.forEach(s=>uniq.add(s.id)));
+  const row=(a,b)=>`<tr><td>${a}</td><td style="text-align:right">${b}</td></tr>`;
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Territory HQ Report — ${label}</title>
+  <style>
+    body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;padding:32px;max-width:760px;margin:0 auto;}
+    h1{font-size:22px;margin:0 0 2px;} .sub{color:#666;margin-bottom:20px;font-size:13px;}
+    h2{font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:#888;border-bottom:1px solid #ddd;padding-bottom:4px;margin:24px 0 10px;}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;}
+    td,th{padding:5px 8px;border-bottom:1px solid #eee;text-align:left;}
+    .kpis{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;}
+    .kpi{flex:1;min-width:110px;border:1px solid #e5e5e5;border-radius:8px;padding:12px;}
+    .kpi .n{font-size:24px;font-weight:700;color:#b8860b;} .kpi .l{font-size:11px;color:#777;text-transform:uppercase;}
+    .foot{margin-top:30px;color:#aaa;font-size:11px;}
+    @media print{ button{display:none;} body{padding:0;} }
+  </style></head><body>
+    <h1>Territory HQ — ${period[0].toUpperCase()+period.slice(1)} Report</h1>
+    <div class="sub">${label} · ${startStr} to ${endStr} · generated ${new Date().toLocaleDateString()}</div>
+    <div class="kpis">
+      <div class="kpi"><div class="n">${logs.length}</div><div class="l">Routes run</div></div>
+      <div class="kpi"><div class="n">${visits}</div><div class="l">Visits</div></div>
+      <div class="kpi"><div class="n">${miles.toFixed(0)}</div><div class="l">Miles</div></div>
+      <div class="kpi"><div class="n">$${spend.toFixed(0)}</div><div class="l">Expenses</div></div>
+      <div class="kpi"><div class="n">${actCredits}</div><div class="l">Credits</div></div>
+      <div class="kpi"><div class="n">${msgs.length}</div><div class="l">Messages</div></div>
+    </div>
+    <h2>Expenses by category</h2>
+    <table>${Object.keys(byCat).length?Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>row(c,'$'+v.toFixed(2))).join(''):row('None','')}
+      ${row('<b>Est. mileage reimbursement</b>','<b>$'+mileageReimb.toFixed(2)+'</b>')}</table>
+    <h2>Coverage & activity</h2>
+    <table>${row('Unique accounts visited', uniq.size+' of '+state.accounts.length)}
+      ${row('Credits issued', acts.length+' entries ('+actCredits+' credits)')}
+      ${row('Messages sent', msgs.length+' ('+msgTexts+' text, '+msgEmails+' email)')}
+      ${row('New OCM stores opened', newStores.length)}
+      ${row('Accounts neglected (30d+)', neglected.length)}</table>
+    <h2>Accounts by status</h2>
+    <table>${Object.entries(byStatus).map(([s,n])=>row(s,n)).join('')}${row('<b>Total</b>','<b>'+state.accounts.length+'</b>')}</table>
+    ${logs.length?`<h2>Routes completed</h2><table><tr><th>Date</th><th>Day</th><th>Stops</th><th style="text-align:right">Miles</th></tr>
+      ${logs.sort((a,b)=>a.date.localeCompare(b.date)).map(l=>`<tr><td>${l.date}</td><td>${l.day||''}</td><td>${l.stops.map(s=>s.name).join(', ')}</td><td style="text-align:right">${(l.miles||0).toFixed(1)}</td></tr>`).join('')}</table>`:''}
+    ${acts.length?`<h2>Credits issued</h2><table><tr><th>Date</th><th>Client</th><th style="text-align:right">Amount</th><th>Reason</th></tr>
+      ${acts.sort((a,b)=>b.date.localeCompare(a.date)).map(c=>`<tr><td>${c.date}</td><td>${c.accountName}</td><td style="text-align:right">${c.amount}</td><td>${c.note||''}</td></tr>`).join('')}</table>`:''}
+    ${msgs.length?`<h2>Messages sent</h2><table><tr><th>Date</th><th>Client</th><th>Channel</th><th>Message</th></tr>
+      ${msgs.sort((a,b)=>b.date.localeCompare(a.date)).map(m=>`<tr><td>${(m.date||'').slice(0,10)}</td><td>${m.accountName}</td><td>${m.channel}</td><td>${(m.body||'').slice(0,70).replace(/\n/g,' ')}</td></tr>`).join('')}</table>`:''}
+    ${newStores.length?`<h2>New OCM stores opened</h2><table><tr><th>Name</th><th>County</th><th>Opened</th></tr>
+      ${newStores.map(r=>`<tr><td>${(r.dba||r.entity_name||'')}</td><td>${r.county||''}</td><td>${r.retail_date_opened_to_public||''}</td></tr>`).join('')}</table>`:''}
+    ${neglected.length?`<h2>Most neglected accounts</h2><table><tr><th>Name</th><th>Status</th><th>Last visit</th></tr>
+      ${neglected.slice(0,15).map(a=>{const ds=daysSince(a.lastVisited);return `<tr><td>${a.name}</td><td>${a.status}</td><td>${a.lastVisited?a.lastVisited+' ('+ds+'d)':'Never'}</td></tr>`;}).join('')}</table>`:''}
+    <div class="foot">Generated by Territory HQ</div>
+    <script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>
+  </body></html>`;
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Allow pop-ups to export the PDF.'); return; }
+  w.document.write(html); w.document.close();
+}
+
+/* ---------------- CREDITS ---------------- */
+function renderCredits(){
+  const ledger = [...state.credits].sort((a,b)=>b.date.localeCompare(a.date));
+  const total = ledger.reduce((s,c)=>s+Number(c.amount||0),0);
+  const thisMonth = new Date().toISOString().slice(0,7);
+  const monthTotal = ledger.filter(c=>c.date.startsWith(thisMonth)).reduce((s,c)=>s+Number(c.amount||0),0);
+  // balances per account
+  const balances = state.accounts.map(a=>({ acc:a, bal:creditBalance(a.id) })).filter(x=>x.bal!==0).sort((a,b)=>b.bal-a.bal);
+  const draft = state.lastCreditDraft || '';
+  const apiBase = (typeof location!=='undefined' && location.origin && !location.origin.startsWith('file'))? location.origin : 'https://your-site.pages.dev';
+  return `
+    <h2 class="disp" style="font-size:20px;">Client credits</h2>
+    <div class="muted" style="margin:6px 0 14px;">Add credits to a client's account. Balances accrue per client and are exposed via an API your other apps can read.</div>
+    <div class="cards4">
+      <div class="card stat"><div class="num">${total}</div><div class="lbl">Total credits issued</div></div>
+      <div class="card stat"><div class="num">${monthTotal}</div><div class="lbl">This month</div></div>
+      <div class="card stat"><div class="num">${balances.length}</div><div class="lbl">Clients with balance</div></div>
+      <div class="card stat"><div class="num">${ledger.length}</div><div class="lbl">Ledger entries</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-weight:600;margin-bottom:8px;">Add credits to a client</div>
+      <div class="grid2">
+        <div><label>Client account</label>
+          <select id="crAccount"><option value="">— select —</option>${state.accounts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.city?` (${esc(a.city)})`:''}</option>`).join('')}</select>
+        </div>
+        <div><label>Credit amount</label><input id="crAmount" type="number" step="1" value="${state.settings.defaultCredit||''}" placeholder="e.g. 250"></div>
+      </div>
+      <label>Reason / note (optional)</label><input id="crNote" placeholder="e.g. brand activation, promo display, volume bonus">
+      <div class="flexEnd"><button class="primary" id="addCreditBtn">Add credits</button></div>
+    </div>
+
+    ${draft?`<div class="card" style="border-color:var(--amber);margin-bottom:16px;">
+      <div style="font-weight:600;margin-bottom:6px;">Alert email — ready to send</div>
+      <textarea rows="8" id="crDraft">${esc(draft)}</textarea>
+      <div class="flexEnd"><button class="ghost" id="copyCrDraft">Copy</button></div>
+    </div>`:''}
+
+    <h2 class="section">Current balances</h2>
+    ${balances.length===0?`<div class="empty">No credits issued yet.</div>`:`
+    <table>
+      <tr><th>Client</th><th>City</th><th>License</th><th>Balance</th></tr>
+      ${balances.map(b=>`<tr>
+        <td data-label="Client"><b>${esc(b.acc.name)}</b></td>
+        <td data-label="City">${esc(b.acc.city||'')}</td>
+        <td data-label="License">${esc(b.acc.licenseNumber||'—')}</td>
+        <td data-label="Balance"><b style="color:var(--amber);">${b.bal}</b></td>
+      </tr>`).join('')}
+    </table>`}
+
+    ${ledger.length?`<h2 class="section">Credit ledger</h2>
+    <table>
+      <tr><th>Date</th><th>Client</th><th>Amount</th><th>Reason</th></tr>
+      ${ledger.map(c=>`<tr>
+        <td data-label="Date"><b>${esc(c.date)}</b></td>
+        <td data-label="Client">${esc(c.accountName)}</td>
+        <td data-label="Amount">${Number(c.amount)>0?'+':''}${c.amount}</td>
+        <td data-label="Reason" class="muted">${esc(c.note||'')}</td>
+      </tr>`).join('')}
+    </table>`:''}
+
+    <h2 class="section">API for other apps</h2>
+    <div class="card">
+      <div class="muted" style="margin-bottom:8px;">Your other web apps can pull live credit balances from these read-only endpoints (CORS-enabled, JSON):</div>
+      <div class="mono" style="font-size:12px;background:var(--panel2);padding:10px;border-radius:8px;word-break:break-all;">
+        GET ${apiBase}/api/credits/balances<br>
+        <span class="muted">→ [{ accountName, licenseNumber, city, balance }]</span><br><br>
+        GET ${apiBase}/api/credits/balances?license=OCM-XXXX<br>
+        <span class="muted">→ balance for a single client by OCM license number</span><br><br>
+        <span class="muted">Header required: Authorization: Bearer &lt;READ_TOKEN&gt;</span>
+      </div>
+      <div class="muted" style="margin-top:8px;">License number is the shared key to match a client across your apps.</div>
+    </div>
+  `;
+}
+
+
+/* ---------------- ADMIN ---------------- */
+function renderAdmin(){
+  const users = state.adminUsers;
+  if(!users) return `<h2 class="disp" style="font-size:20px;">Admin</h2><div class="empty">Loading members\u2026</div>`;
+  const today = new Date().toISOString().slice(0,10);
+  const pending = users.filter(u=>u.status==='pending').length;
+  const active = users.filter(u=>u.status==='active' && (!u.subExpires || u.subExpires>=today)).length;
+  const expired = users.filter(u=>u.status==='active' && u.subExpires && u.subExpires<today).length;
+  return `
+    <h2 class="disp" style="font-size:20px;">Admin \u2014 members & subscriptions</h2>
+    <div class="muted" style="margin:6px 0 14px;">Approve sign-ups, manage subscription dates, suspend access. Subscriptions are managed manually here (payment processing can be added later).</div>
+    <div class="cards4">
+      <div class="card stat"><div class="num">${users.length}</div><div class="lbl">Total members</div></div>
+      <div class="card stat"><div class="num" style="color:${pending?'var(--amber)':'inherit'}">${pending}</div><div class="lbl">Pending approval</div></div>
+      <div class="card stat"><div class="num">${active}</div><div class="lbl">Active</div></div>
+      <div class="card stat"><div class="num">${expired}</div><div class="lbl">Expired</div></div>
+    </div>
+    <table>
+      <tr><th>Member</th><th>Status</th><th>Role</th><th>Subscription until</th><th>Actions</th></tr>
+      ${users.map(u=>{
+        const isExpired = u.status==='active' && u.subExpires && u.subExpires<today;
+        return `<tr>
+        <td data-label="Member"><b>${esc(u.name||'')}</b><div class="muted">${esc(u.email)}</div><div class="muted">joined ${esc((u.createdAt||'').slice(0,10))}</div></td>
+        <td data-label="Status"><span class="pill ${u.status==='active'?(isExpired?'inactive':'active'):(u.status==='pending'?'tracking':'inactive')}">${isExpired?'expired':u.status}</span></td>
+        <td data-label="Role">${esc(u.role)}</td>
+        <td data-label="Sub until"><input type="date" value="${esc(u.subExpires||'')}" data-subdate="${u.id}" style="width:auto;"></td>
+        <td data-label="Actions">
+          ${u.status==='pending'?`<button class="primary small" data-uapprove="${u.id}">Approve</button>`:''}
+          ${u.status==='active'?`<button class="ghost small" data-ususpend="${u.id}" style="color:var(--red);border-color:#4a2222;">Suspend</button>`:''}
+          ${u.status==='suspended'?`<button class="ghost small" data-uapprove="${u.id}">Reactivate</button>`:''}
+          <button class="ghost small" data-usave="${u.id}">Save date</button>
+          ${u.role!=='admin'?`<button class="ghost small" data-umkadmin="${u.id}">Make admin</button>`:''}
+        </td>
+      </tr>`;}).join('')}
+    </table>
+  `;
+}
+
+/* ---------------- MESSAGES ---------------- */
+function renderMessages(){
+  const opts = state.accounts.map(a=>`<option value="${a.id}">${esc(a.name)}${a.phone?'':' (no phone)'}</option>`).join('');
+  const smsOn = state.user && state.user.smsEnabled;
+  return `
+    <h2 class="disp" style="font-size:20px;">Messages</h2>
+    <div class="muted" style="margin:4px 0 14px;">${smsOn?'Direct SMS sending is connected — messages send immediately from here.':'Direct SMS sending isn\\u2019t connected yet — drafts open your phone\\u2019s Messages app instead. Add Twilio keys in Settings/environment to enable one-click sending.'}</div>
+    <div class="card" style="max-width:640px;">
+      <label>Account</label>
+      <select id="msgAccount"><option value="">— select —</option>${opts}</select>
+      <div class="grid2">
+        <div><label>Channel</label><select id="msgChannel"><option>Text (SMS)</option><option>Email</option></select></div>
+        <div><label>Purpose</label>
+          <select id="msgPurpose">
+            <option>First outreach / introduction</option>
+            <option>Follow-up after a visit</option>
+            <option>Propose a brand activation</option>
+            <option>Check-in / relationship maintenance</option>
+            <option>New product / promo announcement</option>
+            <option>Reorder reminder</option>
+            <option>Apology / service recovery</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div><label>Tone</label>
+          <select id="msgTone">
+            <option>Warm & friendly</option>
+            <option>Professional</option>
+            <option>Direct & brief</option>
+            <option>Casual</option>
+          </select>
+        </div>
+        <div><label>Length</label>
+          <select id="msgLength">
+            <option value="short">Short (1-2 sentences)</option>
+            <option value="medium">Medium (3-4 sentences)</option>
+          </select>
+        </div>
+      </div>
+      <label>Extra context (optional)</label>
+      <textarea id="msgContext" rows="2" placeholder="e.g. mention the new vape line..."></textarea>
+      <div class="flexEnd"><button class="primary" id="genMsgBtn">Generate draft</button></div>
+      <div id="msgOut"></div>
+    </div>
+
+    <h2 class="section">SMS blast <span class="muted" style="font-size:12px;text-transform:none;">(future integration ready)</span></h2>
+    <div class="card" style="max-width:640px;">
+      <div class="muted" style="margin-bottom:8px;">Send the same message to multiple accounts at once. Use <span class="mono">{name}</span> to personalize. ${smsOn?'Sends live now.':'Not connected to an SMS provider yet — messages will be logged as queued, ready for when you add one.'}</div>
+      <label>Recipients</label>
+      <div style="max-height:180px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;">
+        ${state.accounts.length===0?'<div class="muted">No accounts yet.</div>':state.accounts.map(a=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;">
+            <input type="checkbox" class="blastChk" value="${a.id}" style="width:auto;" ${a.phone?'':'disabled'}>
+            ${esc(a.name)} ${a.phone?`<span class="muted">${esc(a.phone)}</span>`:'<span class="muted">(no phone)</span>'}
+          </label>`).join('')}
+      </div>
+      <div class="flexEnd" style="margin-top:6px;"><button class="ghost small" id="blastSelectAll">Select all with phone</button></div>
+      <label>Message</label>
+      <textarea id="blastText" rows="3" placeholder="Hi {name}, ..."></textarea>
+      <div class="flexEnd"><button class="primary" id="sendBlastBtn">${state.blastLoading?'Sending…':'Send blast'}</button></div>
+      <div id="blastOut"></div>
+    </div>
+
+    ${renderMessageHistory()}
+  `;
+}
+function renderMessageHistory(){
+  const msgs = [...state.messages].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,40);
+  const apiBase = (typeof location!=='undefined' && location.origin && !location.origin.startsWith('file'))? location.origin : 'https://your-site.netlify.app';
+  return `
+    <h2 class="section">Message history</h2>
+    ${msgs.length===0?`<div class="empty">No messages logged yet. Generate one above and open, save, or send it — it'll be recorded here and shared via the API.</div>`:`
+    <table>
+      <tr><th>When</th><th>Client</th><th>Channel</th><th>Status</th><th>Message</th><th></th></tr>
+      ${msgs.map(m=>`<tr>
+        <td data-label="When"><b>${esc(m.date.slice(0,10))}</b></td>
+        <td data-label="Client">${esc(m.accountName)}${m.blastId?' <span class="muted">(blast)</span>':''}</td>
+        <td data-label="Channel">${esc(m.channel)}</td>
+        <td data-label="Status">${m.status==='sent'?'<span class="pill active">sent</span>':m.status==='queued'?'<span class="pill tracking">queued</span>':'<span class="pill prospect">logged</span>'}</td>
+        <td data-label="Message" class="muted">${esc((m.body||'').slice(0,70))}${(m.body||'').length>70?'…':''}</td>
+        <td data-label="">
+          ${m.channel==='text'&&m.to?`<button class="ghost small" data-resend="${m.id}">Resend</button>`:''}
+          <button class="ghost small" data-delmsg="${m.id}" style="color:var(--red);">Delete</button>
+        </td>
+      </tr>`).join('')}
+    </table>`}
+    <h2 class="section">API for other apps</h2>
+    <div class="card">
+      <div class="muted" style="margin-bottom:8px;">Other apps can read the shared message log (CORS-enabled, JSON):</div>
+      <div class="mono" style="font-size:12px;background:var(--panel2);padding:10px;border-radius:8px;word-break:break-all;">
+        GET ${apiBase}/api/messages/shared<br>
+        <span class="muted">→ [{ accountName, licenseNumber, channel, body, to, date, direction, status }]</span><br><br>
+        GET ${apiBase}/api/messages/shared?license=OCM-XXXX<br>
+        <span class="muted">→ all messages for one client by OCM license number</span><br><br>
+        <span class="muted">Header required: Authorization: Bearer &lt;READ_TOKEN&gt;</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------- EXPENSES ---------------- */
+function renderExpenses(){
+  const total = state.expenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const byCat = {};
+  state.expenses.forEach(e=>{ byCat[e.category]=(byCat[e.category]||0)+Number(e.amount||0); });
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <h2 class="disp" style="font-size:20px;">Expenses</h2>
+      <button class="primary" id="newExpBtn">+ Log expense</button>
+    </div>
+    <div class="cards4">
+      <div class="card stat"><div class="num">$${total.toFixed(0)}</div><div class="lbl">Total logged</div></div>
+      ${Object.entries(byCat).slice(0,3).map(([c,v])=>`<div class="card stat"><div class="num">$${v.toFixed(0)}</div><div class="lbl">${esc(c)}</div></div>`).join('')}
+    </div>
+    ${state.expenses.length===0?`<div class="empty">No expenses logged yet.</div>`:`
+    <table>
+      <tr><th>Date</th><th>Category</th><th>Amount</th><th>Miles</th><th>Notes</th><th></th></tr>
+      ${state.expenses.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(e=>`
+        <tr>
+          <td data-label="Date">${esc(e.date)}</td><td data-label="Category">${esc(e.category)}</td><td data-label="Amount">$${Number(e.amount).toFixed(2)}</td>
+          <td data-label="Miles">${e.miles?esc(e.miles)+' mi ($'+(e.miles*state.settings.mileageRate).toFixed(2)+')':'—'}</td>
+          <td data-label="Notes" class="muted">${esc(e.notes||'')}</td>
+          <td data-label=""><button class="ghost small" data-delexp="${e.id}">Delete</button></td>
+        </tr>`).join('')}
+    </table>`}
+  `;
+}
+function expenseModal(){
+  return `<div class="modalBg" id="expModalBg"><div class="modal">
+    <button class="closeX" id="expClose">✕</button>
+    <h3 class="disp">Log expense</h3>
+    <form id="expForm">
+      <div class="grid2">
+        <div><label>Date</label><input type="date" name="date" value="${new Date().toISOString().slice(0,10)}" required></div>
+        <div><label>Category</label><select name="category">${['Gas','Mileage','Meals','Parking/Tolls','Samples & Supplies','Lodging','Other'].map(c=>`<option>${c}</option>`).join('')}</select></div>
+      </div>
+      <div class="grid2">
+        <div><label>Amount ($)</label><input type="number" step="0.01" name="amount" required></div>
+        <div><label>Miles (optional, for mileage @ $${state.settings.mileageRate}/mi)</label><input type="number" step="0.1" name="miles"></div>
+      </div>
+      <label>Notes</label><input name="notes" placeholder="e.g. gas run before Albany loop">
+      <div class="flexEnd"><button type="button" class="ghost" id="expCancel">Cancel</button><button class="primary" type="submit">Save</button></div>
+    </form>
+  </div></div>`;
+}
+
+/* ---------------- SETTINGS ---------------- */
+function renderSettings(){
+  const s = state.settings;
+  const counties = ['Albany','Broome','Bronx','Erie','Kings','Monroe','Nassau','New York','Niagara','Onondaga','Orange','Queens','Rensselaer','Richmond','Rockland','Saratoga','Schenectady','Suffolk','Ulster','Westchester'];
+  return `
+    <h2 class="disp" style="font-size:20px;">Settings</h2>
+    <div class="card" style="max-width:640px;">
+      <label>Home base address (route starts & ends here)</label>
+      <input id="homeAddr" value="${esc(s.homeAddress)}" placeholder="123 Main St, Albany, NY">
+      <div class="muted" style="margin-top:6px;">${s.homeLat? 'Located at '+s.homeLat.toFixed(4)+', '+s.homeLng.toFixed(4) : 'Not yet located.'}</div>
+      <div class="flexEnd" style="margin-top:8px;"><button class="ghost" id="geoHomeBtn">Locate address</button></div>
+
+      <label style="margin-top:18px;">Work days</label>
+      <div>${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`<span class="dayChip ${s.workDays.includes(d)?'on':''}" data-workday="${d}">${d}</span>`).join('')}</div>
+
+      <label>Counties to watch on OCM (new store alerts limited to these)</label>
+      <div>${counties.map(c=>`<span class="countyChip ${s.counties.includes(c)?'on':''}" data-county="${c}">${c}</span>`).join('')}</div>
+
+      <label>Mileage reimbursement rate ($/mile)</label>
+      <input id="mileageRate" type="number" step="0.01" value="${s.mileageRate}">
+      <div class="muted" style="margin-top:4px;">Verify against the current IRS standard mileage rate — this app doesn't auto-update it.</div>
+
+      <label style="margin-top:18px;">Google Maps API key (optional)</label>
+      <input id="gmapsKey" value="${esc(s.gmapsKey)}" placeholder="AIza...">
+      <div class="muted" style="margin-top:4px;">Enables real driving routes, drive times, and an interactive map on the Weekly Route tab.</div>
+
+      <label style="margin-top:18px;">Default credit amount (optional)</label>
+      <input id="defaultCredit" type="number" step="1" value="${s.defaultCredit||0}">
+      <div class="muted" style="margin-top:4px;">Pre-fills the amount when adding credits. You can override it each time.</div>
+
+      <label style="margin-top:18px;">Marketing alert email</label>
+      <input id="alertEmail" value="${esc(s.alertEmail||'')}" placeholder="marketing@yourcompany.com">
+      <div class="muted" style="margin-top:4px;">Credit alert emails are pre-addressed to this. (Drafted in-app for you to send — no auto-send yet.)</div>
+
+      <div class="flexEnd" style="margin-top:14px;"><button class="primary" id="saveSettingsBtn">Save settings</button></div>
+    </div>
+  `;
+}
+
+/* build and save an account from an OCM record; used by both the list and the license search */
+async function addAccountFromOCM(r){
+  const existing = state.accounts.find(a=>a.licenseNumber===r.license_number);
+  if(existing){ showToast(existing.name+' is already an account.'); return; }
+  const addr = `${r.address_line_1}, ${r.city}, NY ${r.zip_code||''}`;
+  showToast('Adding & locating…');
+  const loc = await geocode(addr);
+  const acct = {
+    id:'a'+Date.now(), name:r.dba||r.entity_name, dba:r.dba||'', address:r.address_line_1||'',
+    city:r.city||'', county:r.county||'', phone:'', email:'', contactName:'', status:'Prospect',
+    priority:false, priorityRank:1, notes:'License #'+r.license_number+' — added from OCM Watch.',
+    lat: loc?loc.lat:null, lng: loc?loc.lng:null, source:'ocm', licenseNumber:r.license_number
+  };
+  try{
+    await api.post('/api/accounts', acct);
+    const accounts=[...state.accounts, acct];
+    setState({accounts});
+    showToast('Added '+acct.name+' to accounts.');
+  }catch(err){
+    if((err.message||'').includes('409')) showToast('That license is already on another account.');
+    else showToast('Add failed: '+err.message);
+  }
+}
+
+/* ---------------- event wiring ---------------- */
+function postRenderHooks(){
+  if(state.tab==='dashboard'){
+    document.querySelectorAll('[data-approve]').forEach(b=>b.onclick=async()=>{
+      const date = b.dataset.approve;
+      const rv = pendingReviews().find(r=>r.date===date);
+      if(!rv) return;
+      const checked = Array.from(document.querySelectorAll(`.reviewChk[data-rvdate="${date}"]`)).filter(c=>c.checked).map(c=>c.dataset.acct);
+      const stops = checked.map(id=>{ const a=state.accounts.find(x=>x.id===id); return a?{id:a.id,name:a.name}:null; }).filter(Boolean);
+      if(stops.length===0){ showToast('No stops checked.'); return; }
+      // estimate miles from optimizer if home is set
+      let miles=0, minutes=0;
+      const home = state.settings.homeLat!=null ? {lat:state.settings.homeLat,lng:state.settings.homeLng} : null;
+      if(home){
+        const accs = stops.map(s=>state.accounts.find(a=>a.id===s.id)).filter(Boolean);
+        try{ const r = optimizeRoute(home, accs); miles=r.totalMiles; }catch(e){}
+      }
+      await completeRoute(date, rv.day, stops, miles, minutes);
+      showToast('Approved '+stops.length+' visit(s) for '+date+'.');
+    });
+    document.querySelectorAll('[data-skipreview]').forEach(b=>b.onclick=async()=>{
+      // dismiss by logging an empty route for that date so it stops appearing
+      const date = b.dataset.skipreview;
+      const rv = pendingReviews().find(r=>r.date===date);
+      const logEntry = { id:'log'+Date.now(), date, day:rv?rv.day:'', stops:[], miles:0, minutes:0, dismissed:true };
+      await api.post('/api/route-log', logEntry);
+      setState({routeLog:[...state.routeLog, logEntry]});
+      showToast('Dismissed '+date+'.');
+    });
+    document.querySelectorAll('[data-recassign]').forEach(sel=>sel.onchange=async()=>{
+      const id = sel.dataset.recassign, day = sel.value;
+      if(!day) return;
+      await setPlanDay(id, day);
+      const a = state.accounts.find(x=>x.id===id);
+      showToast((a?a.name:'Account')+' added to '+day+' this week.');
+    });
+  }
+  if(state.tab==='accounts'){
+    document.getElementById('newAcctBtn').onclick=()=>openAcctModal(null);
+    document.getElementById('sortToggleBtn').onclick=()=>setState({acctSort: state.acctSort==='overdue'?'recent':'overdue'});
+    document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openAcctModal(state.accounts.find(a=>a.id===b.dataset.edit)));
+    document.querySelectorAll('[data-planday]').forEach(sel=>sel.onchange=async()=>{
+      await setPlanDay(sel.dataset.planday, sel.value);
+    });
+  }
+  if(state.tab==='ocm'){
+    document.getElementById('checkOcmBtn').onclick=fetchOCM;
+    document.getElementById('markSeenBtn').onclick=async()=>{
+      const newOnes = state.ocmResults.map(r=>r.license_number).filter(ln=>!state.ocmSeen.includes(ln));
+      if(newOnes.length) await api.post('/api/ocm-seen', {licenseNumbers:newOnes});
+      const seen = Array.from(new Set([...state.ocmSeen, ...newOnes]));
+      setState({ocmSeen:seen});
+      showToast('Marked all as seen.');
+    };
+    document.querySelectorAll('[data-addocm]').forEach(b=>b.onclick=async()=>{
+      const r = state.ocmResults.find(x=>x.license_number===b.dataset.addocm);
+      if(r) await addAccountFromOCM(r);
+    });
+    document.querySelectorAll('[data-searchmode]').forEach(chip=>chip.onclick=()=>setState({ocmSearchMode:chip.dataset.searchmode, ocmSearchResults:null, ocmSearchError:''}));
+    const searchBtn = document.getElementById('ocmSearchBtn');
+    if(searchBtn) searchBtn.onclick=()=>{
+      const val = document.getElementById('ocmSearchInput').value.trim();
+      if(val) searchOCM(val, state.ocmSearchMode||'license');
+    };
+    const searchInput = document.getElementById('ocmSearchInput');
+    if(searchInput) searchInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
+    document.querySelectorAll('[data-addocmsearch]').forEach(b=>b.onclick=async()=>{
+      const sr = (state.ocmSearchResults||[]).find(x=>x.license_number===b.dataset.addocmsearch);
+      if(sr) await addAccountFromOCM(sr);
+    });
+  }
+  if(state.tab==='route'){
+    document.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>setState({routeDay:b.dataset.day, routeResult:null, routeError:''}));
+    // preview map (before optimization)
+    (function(){
+      const day = state.routeDay || state.settings.workDays[0] || 'Mon';
+      const plan = currentPlan();
+      const dayStops = state.accounts.filter(a=>plan[a.id]===day && a.lat!=null);
+      const home = state.settings.homeLat!=null ? {lat:state.settings.homeLat,lng:state.settings.homeLng} : null;
+      const showingResult = state.routeResult && state.routeResult.day===day;
+      if(!home || showingResult || dayStops.length===0) return;
+      if(state.settings.gmapsKey && document.getElementById('previewMap')){
+        loadGoogleMaps(state.settings.gmapsKey).then(()=>{
+          const el = document.getElementById('previewMap'); if(!el||!window.google) return;
+          const map = new google.maps.Map(el, { center:home, zoom:9, disableDefaultUI:true, styles:darkMapStyle });
+          new google.maps.Marker({ position:home, map, label:'H' });
+          const bounds = new google.maps.LatLngBounds(); bounds.extend(home);
+          dayStops.forEach((s,i)=>{ const pos={lat:s.lat,lng:s.lng}; new google.maps.Marker({position:pos,map,label:String(i+1)}); bounds.extend(pos); });
+          map.fitBounds(bounds);
+        }).catch(()=>{});
+      } else if(document.getElementById('previewCanvas')){
+        drawPreviewCanvas(home, dayStops);
+      }
+    })();
+    const optBtn = document.getElementById('optimizeBtn');
+    if(optBtn) optBtn.onclick = async ()=>{
+      const day = state.routeDay || state.settings.workDays[0] || 'Mon';
+      const plan = currentPlan();
+      const dayStops = state.accounts.filter(a=>plan[a.id]===day);
+      const home = {lat:state.settings.homeLat,lng:state.settings.homeLng};
+      setState({routeLoading:true, routeError:''});
+      try{
+        let result;
+        if(state.settings.gmapsKey){
+          result = await optimizeRouteGoogle(home, dayStops);
+        } else {
+          const r = optimizeRoute(home, dayStops);
+          result = { legs:[...r.ordered.map(o=>({...o,distanceText:o.legMiles.toFixed(1)+' mi'})), {name:'Back home',isHome:true,distanceText:r.returnLeg.toFixed(1)+' mi'}], totalMiles:r.totalMiles, totalMinutes:0, skipped:r.skipped, engine:'straight-line' };
+        }
+        result.day = day;
+        setState({routeResult:result, routeLoading:false});
+        if(result.engine==='google') drawGoogleMap(home, result.renderResults);
+        else drawMap(home, dayStops.filter(s=>s.lat!=null));
+      }catch(e){
+        setState({routeLoading:false, routeError:'Route optimization failed: '+e.message});
+      }
+    };
+    if(state.routeResult && state.routeResult.day===(state.routeDay||state.settings.workDays[0]||'Mon')){
+      const home = {lat:state.settings.homeLat,lng:state.settings.homeLng};
+      const plan = currentPlan();
+      if(state.routeResult.engine==='google') drawGoogleMap(home, state.routeResult.renderResults);
+      else drawMap(home, state.accounts.filter(a=>plan[a.id]===state.routeResult.day && a.lat!=null));
+    }
+    const markBtn = document.getElementById('markVisitedBtn');
+    if(markBtn) markBtn.onclick = async ()=>{
+      setState({visitLoading:true});
+      const today = new Date().toISOString().slice(0,10);
+      const r = state.routeResult;
+      const visitedStops = r.legs.filter(l=>!l.isHome);
+      await completeRoute(today, r.day, visitedStops.map(s=>({id:s.id,name:s.name})), r.totalMiles, r.totalMinutes);
+      setState({visitLoading:false, routeResult:null});
+      showToast('Route logged: '+visitedStops.length+' stop(s), '+r.totalMiles.toFixed(1)+' mi.');
+    };
+    document.querySelectorAll('[data-quickday]').forEach(chip=>chip.onclick=async()=>{
+      const day = state.routeDay || state.settings.workDays[0] || 'Mon';
+      const acc = state.accounts.find(a=>a.id===chip.dataset.quickday);
+      if(!acc) return;
+      await setPlanDay(acc.id, day);
+      showToast(acc.name+' added to '+day+'.');
+    });
+  }
+  if(state.tab==='log'){ /* no interactions yet */ }
+  if(state.tab==='admin'){
+    if(!state.adminUsers){ api.get('/api/admin/users').then(u=>setState({adminUsers:u})).catch(()=>{}); }
+    const upd = async (id, patch)=>{
+      await api.put('/api/admin/users/'+id, patch);
+      const adminUsers = state.adminUsers.map(u=>u.id===id?{...u,...patch}:u);
+      setState({adminUsers});
+      showToast('Member updated.');
+    };
+    document.querySelectorAll('[data-uapprove]').forEach(b=>b.onclick=()=>upd(b.dataset.uapprove,{status:'active'}));
+    document.querySelectorAll('[data-ususpend]').forEach(b=>b.onclick=()=>upd(b.dataset.ususpend,{status:'suspended'}));
+    document.querySelectorAll('[data-umkadmin]').forEach(b=>b.onclick=()=>upd(b.dataset.umkadmin,{role:'admin'}));
+    document.querySelectorAll('[data-usave]').forEach(b=>b.onclick=()=>{
+      const inp = document.querySelector(`[data-subdate="${b.dataset.usave}"]`);
+      upd(b.dataset.usave,{subExpires: inp.value||null});
+    });
+  }
+  if(state.tab==='marketing'){
+    const btn = document.getElementById('addCreditBtn');
+    if(btn) btn.onclick=async()=>{
+      const id = document.getElementById('crAccount').value;
+      const amount = document.getElementById('crAmount').value;
+      const note = document.getElementById('crNote').value;
+      if(!id){ showToast('Pick a client first.'); return; }
+      await addCredits(id, amount, note);
+    };
+    const cp = document.getElementById('copyCrDraft');
+    if(cp) cp.onclick=()=>{ navigator.clipboard.writeText(document.getElementById('crDraft').value); showToast('Alert email copied.'); };
+  }
+  if(state.tab==='reports'){
+    document.querySelectorAll('[data-period]').forEach(b=>b.onclick=()=>setState({reportPeriod:b.dataset.period}));
+    const cp = document.getElementById('copyReportBtn');
+    if(cp) cp.onclick=()=>{ navigator.clipboard.writeText(reportAsText()); showToast('Report copied.'); };
+    const pdf = document.getElementById('pdfReportBtn');
+    if(pdf) pdf.onclick=()=>exportReportPDF();
+  }
+  if(state.tab==='messages'){
+    document.getElementById('genMsgBtn').onclick=async()=>{
+      const accId = document.getElementById('msgAccount').value;
+      const acc = state.accounts.find(a=>a.id===accId);
+      const channel = document.getElementById('msgChannel').value;
+      const purpose = document.getElementById('msgPurpose').value;
+      const tone = document.getElementById('msgTone').value;
+      const length = document.getElementById('msgLength').value;
+      const context = document.getElementById('msgContext').value;
+      if(!acc){ showToast('Pick an account first.'); return; }
+      const out = document.getElementById('msgOut');
+      out.innerHTML = '<div class="muted" style="margin-top:12px;">Generating…</div>';
+      const lengthNote = length==='short' ? 'Keep it to 1-2 short sentences.' : 'Keep it to 3-4 sentences, still tight.';
+      const prompt = `Write a ${tone.toLowerCase()} ${channel} to a cannabis retail store contact for a field sales rep.
+Store: ${acc.name} (${acc.city||''}). Contact: ${acc.contactName||'unknown, keep it general'}.
+Purpose: ${purpose}.
+Notes on the account: ${acc.notes||'none'}.
+Extra context: ${context||'none'}.
+${lengthNote} No corporate jargon. ${channel==='Email'?'Include a short subject line on the first line prefixed with "Subject:".':'No subject line.'} Output only the message, nothing else.`;
+      try{
+        const text = await generateMessage(prompt);
+        const isText = channel!=='Email';
+        const phone = (acc.phone||'').replace(/[^0-9+]/g,'');
+        const smsOn = state.user && state.user.smsEnabled;
+        let openBtn = '';
+        if(isText){
+          if(phone){
+            openBtn = (smsOn?`<button class="primary" id="sendNowBtn">Send SMS now</button>`:'')+`<button class="${smsOn?'ghost':'primary'}" id="openMsgBtn">Open in Messages</button>`;
+          } else {
+            openBtn = `<span class="muted">No phone number on this account — add one to text.</span>`;
+          }
+        } else {
+          openBtn = `<button class="primary" id="openMailBtn">Open in email</button>`;
+        }
+        out.innerHTML = `<label style="margin-top:14px;">Draft (edit freely)</label>
+          <textarea id="draftText" rows="6">${esc(text)}</textarea>
+          ${isText&&phone?`<div class="muted" style="margin-top:6px;">Will text ${esc(acc.phone)}.</div>`:''}
+          <div class="flexEnd" style="gap:8px;flex-wrap:wrap;">${openBtn}<button class="ghost" id="saveMsgBtn">Save to history</button><button class="ghost" id="copyDraftBtn">Copy</button></div>
+          <div id="sendResult"></div>`;
+        document.getElementById('copyDraftBtn').onclick=()=>{
+          navigator.clipboard.writeText(document.getElementById('draftText').value);
+          showToast('Copied.');
+        };
+        const chLabel = isText?'text':'email';
+        const saveBtn = document.getElementById('saveMsgBtn');
+        if(saveBtn) saveBtn.onclick=async()=>{
+          await logMessage(acc, chLabel, purpose, document.getElementById('draftText').value, isText?acc.phone:acc.email);
+          showToast('Saved to message history.');
+        };
+        const sendNowBtn = document.getElementById('sendNowBtn');
+        if(sendNowBtn) sendNowBtn.onclick=async()=>{
+          const val = document.getElementById('draftText').value;
+          sendNowBtn.disabled = true; sendNowBtn.textContent='Sending…';
+          try{
+            const r = await api.post('/api/messages/send', { accountId:acc.id, accountName:acc.name, licenseNumber:acc.licenseNumber||'', city:acc.city||'', channel:'text', purpose, to:acc.phone, text:val });
+            const entry = { id:r.id, accountId:acc.id, accountName:acc.name, channel:'text', purpose, body:val, to:acc.phone, direction:'outbound', date:new Date().toISOString(), status: r.sent?'sent':'queued' };
+            setState({ messages:[...state.messages, entry] });
+            document.getElementById('sendResult').innerHTML = r.sent
+              ? `<div class="muted" style="color:var(--green);margin-top:6px;">Sent via SMS.</div>`
+              : `<div class="muted" style="color:var(--amber);margin-top:6px;">Logged, but not actually sent (${esc(r.reason||'no provider')}).</div>`;
+          }catch(err){
+            document.getElementById('sendResult').innerHTML = `<div class="muted" style="color:var(--red);margin-top:6px;">Send failed: ${esc(err.message)}</div>`;
+          }
+          sendNowBtn.disabled=false; sendNowBtn.textContent='Send SMS now';
+        };
+        const openMsg = document.getElementById('openMsgBtn');
+        if(openMsg) openMsg.onclick=async()=>{
+          const val = document.getElementById('draftText').value;
+          await logMessage(acc, 'text', purpose, val, acc.phone);
+          const body = encodeURIComponent(val);
+          // cross-platform sms deep link (iOS uses &body=, Android ?body=; ?&body= works widely)
+          window.location.href = `sms:${phone}?&body=${body}`;
+        };
+        const openMail = document.getElementById('openMailBtn');
+        if(openMail) openMail.onclick=async()=>{
+          const val = document.getElementById('draftText').value;
+          let subject = 'Following up', bodyText = val;
+          const m = val.match(/^Subject:\s*(.+)\n?/i);
+          if(m){ subject = m[1].trim(); bodyText = val.slice(m[0].length).trim(); }
+          await logMessage(acc, 'email', purpose, val, acc.email);
+          window.location.href = `mailto:${encodeURIComponent(acc.email||'')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+        };
+      }catch(e){
+        out.innerHTML = `<div class="muted" style="color:var(--red);margin-top:10px;">Couldn't generate a draft right now.</div>`;
+      }
+    };
+
+    document.querySelectorAll('[data-delmsg]').forEach(b=>b.onclick=async()=>{
+      try{
+        await api.del('/api/messages/'+b.dataset.delmsg);
+        setState({messages: state.messages.filter(m=>m.id!==b.dataset.delmsg)});
+        showToast('Message deleted.');
+      }catch(err){ showToast('Delete failed: '+err.message); }
+    });
+    document.querySelectorAll('[data-resend]').forEach(b=>b.onclick=async()=>{
+      const m = state.messages.find(x=>x.id===b.dataset.resend);
+      if(!m) return;
+      try{
+        const r = await api.post('/api/messages/send', { accountId:m.accountId, accountName:m.accountName, licenseNumber:m.licenseNumber||'', city:m.city||'', channel:'text', purpose:m.purpose||'Resend', to:m.to, text:m.body });
+        const entry = { id:r.id, accountId:m.accountId, accountName:m.accountName, channel:'text', purpose:m.purpose, body:m.body, to:m.to, direction:'outbound', date:new Date().toISOString(), status: r.sent?'sent':'queued' };
+        setState({ messages:[...state.messages, entry] });
+        showToast(r.sent?'Resent via SMS.':'Logged again (no SMS provider connected).');
+      }catch(err){ showToast('Resend failed: '+err.message); }
+    });
+
+    const selectAllBtn = document.getElementById('blastSelectAll');
+    if(selectAllBtn) selectAllBtn.onclick=()=>{
+      document.querySelectorAll('.blastChk').forEach(c=>{ if(!c.disabled) c.checked=true; });
+    };
+    const blastBtn = document.getElementById('sendBlastBtn');
+    if(blastBtn) blastBtn.onclick=async()=>{
+      const ids = Array.from(document.querySelectorAll('.blastChk:checked')).map(c=>c.value);
+      const template = document.getElementById('blastText').value.trim();
+      const out2 = document.getElementById('blastOut');
+      if(!ids.length){ showToast('Select at least one recipient.'); return; }
+      if(!template){ showToast('Write a message first.'); return; }
+      setState({blastLoading:true});
+      out2.innerHTML = '<div class="muted" style="margin-top:8px;">Sending…</div>';
+      try{
+        const r = await api.post('/api/messages/blast', { accountIds:ids, template });
+        state.messages = await api.get('/api/messages');
+        setState({blastLoading:false});
+        out2.innerHTML = `<div class="muted" style="margin-top:8px;">${r.sent} sent live, ${r.queued} logged as queued${r.skipped?', '+r.skipped+' skipped (no phone)':''}.${r.smsEnabled?'':' Connect an SMS provider to make queued messages send for real.'}</div>`;
+        showToast('Blast complete.');
+      }catch(err){
+        setState({blastLoading:false});
+        out2.innerHTML = `<div class="muted" style="color:var(--red);margin-top:8px;">Blast failed: ${esc(err.message)}</div>`;
+      }
+    };
+  }
+  if(state.tab==='expenses'){
+    document.getElementById('newExpBtn').onclick=()=>openExpModal();
+    document.querySelectorAll('[data-delexp]').forEach(b=>b.onclick=async()=>{
+      await api.del('/api/expenses/'+b.dataset.delexp);
+      const expenses = state.expenses.filter(e=>e.id!==b.dataset.delexp);
+      setState({expenses});
+    });
+  }
+  if(state.tab==='settings'){
+    document.getElementById('geoHomeBtn').onclick=async()=>{
+      const addr = document.getElementById('homeAddr').value;
+      if(!addr){ showToast('Enter an address first.'); return; }
+      showToast('Locating…');
+      const loc = await geocode(addr);
+      if(loc){ setState({settings:{...state.settings, homeAddress:addr, homeLat:loc.lat, homeLng:loc.lng}}); showToast('Home base located — click Save settings to store it.'); }
+      else showToast('Could not locate that address.');
+    };
+    document.querySelectorAll('[data-workday]').forEach(b=>b.onclick=()=>{
+      const d = b.dataset.workday;
+      const list = state.settings.workDays.includes(d) ? state.settings.workDays.filter(x=>x!==d) : [...state.settings.workDays, d];
+      setState({settings:{...state.settings, workDays:list}});
+    });
+    document.querySelectorAll('[data-county]').forEach(b=>b.onclick=()=>{
+      const c = b.dataset.county;
+      const list = state.settings.counties.includes(c) ? state.settings.counties.filter(x=>x!==c) : [...state.settings.counties, c];
+      setState({settings:{...state.settings, counties:list}});
+    });
+    document.getElementById('saveSettingsBtn').onclick=async()=>{
+      const rate = parseFloat(document.getElementById('mileageRate').value)||0;
+      const gmapsKey = document.getElementById('gmapsKey').value.trim();
+      const defaultCredit = parseFloat(document.getElementById('defaultCredit').value)||0;
+      const alertEmail = document.getElementById('alertEmail').value.trim();
+      const settings = {...state.settings, mileageRate:rate, gmapsKey, defaultCredit, alertEmail};
+      try{
+        await api.put('/api/settings', settings);
+        setState({settings});
+        showToast('Settings saved.');
+      }catch(err){
+        showToast('Save failed: '+err.message);
+      }
+    };
+  }
+}
+
+function openAcctModal(existing){
+  document.body.insertAdjacentHTML('beforeend', accountModal(existing));
+  const close = ()=>document.getElementById('acctModalBg').remove();
+  document.getElementById('acctClose').onclick=close;
+  document.getElementById('acctCancel').onclick=close;
+  if(existing){
+    const credBtn = document.getElementById('acctCredits');
+    if(credBtn) credBtn.onclick=()=>{ close(); setState({tab:'marketing'}); };
+  }
+  if(existing) document.getElementById('acctDelete').onclick=async()=>{
+    await api.del('/api/accounts/'+existing.id);
+    const accounts = state.accounts.filter(a=>a.id!==existing.id);
+    setState({accounts}); close();
+  };
+  document.getElementById('acctForm').onsubmit=async(e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const licenseNumber = (fd.get('licenseNumber')||'').trim();
+    const dupWarning = document.getElementById('dupWarning');
+    if(!licenseNumber){ dupWarning.textContent='License number is required.'; dupWarning.style.display='block'; return; }
+    const clash = state.accounts.find(a=>a.licenseNumber && a.licenseNumber===licenseNumber && (!existing || a.id!==existing.id));
+    if(clash){ dupWarning.textContent='An account with this license number already exists: '+clash.name; dupWarning.style.display='block'; return; }
+    dupWarning.style.display='none';
+    const addr = fd.get('address')+', '+fd.get('city')+', NY';
+    showToast('Saving & locating…');
+    const loc = await geocode(addr);
+    const data = {
+      id: existing?existing.id:'a'+Date.now(),
+      name: fd.get('name'), dba: fd.get('dba'), address: fd.get('address'), city: fd.get('city'),
+      county: fd.get('county'), phone: fd.get('phone'), email: fd.get('email'), contactName: fd.get('contactName'),
+      status: fd.get('status'), priority: fd.get('priority')==='on', priorityRank: parseInt(fd.get('priorityRank'))||1,
+      notes: fd.get('notes'), licenseNumber,
+      lat: loc?loc.lat:(existing?existing.lat:null), lng: loc?loc.lng:(existing?existing.lng:null),
+      source: existing?existing.source:'manual', lastVisited: existing?existing.lastVisited:null
+    };
+    try{
+      if(existing) await api.put('/api/accounts/'+existing.id, data);
+      else await api.post('/api/accounts', data);
+      let accounts;
+      if(existing) accounts = state.accounts.map(a=>a.id===existing.id?data:a);
+      else accounts = [...state.accounts, data];
+      setState({accounts});
+      close();
+      showToast(loc? 'Saved and located.' : 'Saved — address could not be located, route will skip it.');
+    }catch(err){
+      if((err.message||'').includes('409') || (err.message||'').toLowerCase().includes('duplicate')){
+        showToast('That license number is already on another account.');
+      } else {
+        showToast('Save failed: '+err.message);
+      }
+    }
+  };
+}
+function openExpModal(){
+  document.body.insertAdjacentHTML('beforeend', expenseModal());
+  const close = ()=>document.getElementById('expModalBg').remove();
+  document.getElementById('expClose').onclick=close;
+  document.getElementById('expCancel').onclick=close;
+  document.getElementById('expForm').onsubmit=async(e)=>{
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const miles = parseFloat(fd.get('miles'))||0;
+    const data = { id:'e'+Date.now(), date:fd.get('date'), category:fd.get('category'), amount:parseFloat(fd.get('amount'))||0, miles, notes:fd.get('notes') };
+    await api.post('/api/expenses', data);
+    const expenses = [...state.expenses, data];
+    setState({expenses});
+    close();
+  };
+}
+
+init();
+</script>
+</body>
+</html>
