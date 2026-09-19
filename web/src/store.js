@@ -3,7 +3,7 @@ import { api, setSessionHooks, getToken, setToken, clearToken } from './api';
 
 const DEFAULT_SETTINGS = {
   homeAddress: '', homeLat: null, homeLng: null, counties: [], workDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-  mileageRate: 0.70, gmapsKey: '', cartoKey: '', defaultCredit: 0, alertEmail: '',
+  mileageRate: 0.70, gmapsKey: '', defaultCredit: 0, alertEmail: '',
 };
 
 // A Google Maps key must look like "AIza...". Anything else (typos, passwords,

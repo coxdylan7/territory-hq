@@ -41,7 +41,7 @@ export function MapView({ home, stops, line, height = 340, fit = true }) {
   useEffect(() => {
     if (!ref.current || mapRef.current) return;
     const map = L.map(ref.current, { zoomControl: true, attributionControl: false });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
     }).addTo(map);
     mapRef.current = map;
@@ -75,7 +75,7 @@ export function MapView({ home, stops, line, height = 340, fit = true }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <div ref={ref} style={{ width: '100%', height }} />;
+  return <div ref={ref} className="darktiles" style={{ width: '100%', height }} />;
 }
 
 /* ---------------- Auth screens ---------------- */

@@ -259,6 +259,9 @@ canvas{background:linear-gradient(180deg,#0c1321,#0a0f19);border-radius:9px;}
 }
 .leaflet-control-attribution{background:rgba(9,13,22,.75)!important;color:#5b6a83!important;}
 .leaflet-control-attribution a{color:#5b6a83!important;}
+.darktiles .leaflet-tile-pane .leaflet-tile{
+  filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.88) saturate(.35);
+}
 .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:rgba(20,27,40,.95);color:var(--text);border:1px solid rgba(45,212,191,.25);box-shadow:0 16px 40px -14px rgba(0,0,0,.8);}
 .leaflet-popup-content{font-family:'Inter',sans-serif;font-size:12.5px;margin:10px 12px;}
 .leaflet-bar a{background-color:#0e1522;color:var(--text);border-bottom:1px solid var(--line);}
