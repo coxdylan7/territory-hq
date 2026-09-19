@@ -1,25 +1,33 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { api } from '../api';
-import { currentWeekKey, currentPlan, pendingReviews, recommendations, optimizeRoute } from '../utils';
-import { completeRoute, setPlanDay } from '../actions';
-import { Section, Stat, Pill, Empty } from '../components';
+import { currentWeekKey, currentPlan, planForWeek, pendingReviews, recommendations, optimizeRoute } from '../utils';
+import { completeRoute, setPlanDay, autoPlanWeek } from '../actions';
+import { Section, Stat, Pill, Empty, WeekNav } from '../components';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function Dashboard() {
   const st = useStore();
   const { set, accounts, ocmResults, ocmSeen, weekPlan, routeLog } = st;
-  const plan = currentPlan(weekPlan);
   const wk = currentWeekKey();
+  const wkSel = st.planWeek;
+  const isCurrent = wkSel === wk;
+  const plan = planForWeek(weekPlan, wkSel);
+  const [planning, setPlanning] = useState(false);
   const today = new Date().toLocaleDateString('en-US', { weekday: 'short' });
   const plannedCount = Object.keys(plan).length;
-  const todaysStops = accounts.filter((a) => plan[a.id] === today);
+  const todaysStops = accounts.filter((a) => currentPlan(weekPlan)[a.id] === today);
   const thisMonth = new Date().toISOString().slice(0, 7);
   const monthSpend = st.expenses.filter((e) => e.date?.startsWith(thisMonth)).reduce((s, e) => s + Number(e.amount || 0), 0);
   const newCount = ocmResults.filter((r) => !ocmSeen.includes(r.license_number)).length;
   const reviews = pendingReviews(weekPlan, routeLog);
   const recs = recommendations(accounts, plan);
+
+  async function runAutoPlan() {
+    setPlanning(true);
+    try { await autoPlanWeek(wkSel); } finally { setPlanning(false); }
+  }
 
   async function approve(date) {
     const rv = reviews.find((r) => r.date === date);
@@ -57,13 +65,23 @@ export default function Dashboard() {
 
   return (
     <>
-      <h2 className="disp" style={{ fontSize: 22, marginBottom: 2 }}>Good to see you.</h2>
-      <div className="muted" style={{ marginBottom: 18 }}>
-        {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Week {wk}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+        <div>
+          <h2 className="disp" style={{ fontSize: 22, marginBottom: 2 }}>Good to see you.</h2>
+          <div className="muted">
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Week {wk}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="primary" onClick={runAutoPlan} disabled={planning}>
+            {planning ? 'Planning…' : (isCurrent ? '⚡ Auto-plan this week' : `⚡ Auto-plan ${wkSel}`)}
+          </button>
+          <WeekNav />
+        </div>
       </div>
       <div className="cards4">
         <Stat num={accounts.length} lbl="Tracked accounts" />
-        <Stat num={plannedCount} lbl="Planned this week" />
+        <Stat num={plannedCount} lbl={isCurrent ? 'Planned this week' : `Planned ${wkSel}`} />
         <Stat num={todaysStops.length} lbl={`Stops today (${today})`} />
         <Stat num={newCount} lbl="New OCM stores" />
       </div>
@@ -102,7 +120,7 @@ export default function Dashboard() {
       {recs.length > 0 && (
         <>
           <Section>Recommended stops to schedule</Section>
-          <div className="muted" style={{ marginBottom: 10 }}>Based on time since last visit, status, and your notes. Tap to add to this week.</div>
+          <div className="muted" style={{ marginBottom: 10 }}>Based on time since last visit, status, and your notes. Tap to add to {wkSel}.</div>
           {recs.map((r) => (
             <div className="card" style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }} key={r.account.id}>
               <div>

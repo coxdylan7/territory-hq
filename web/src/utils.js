@@ -14,6 +14,18 @@ export function currentWeekKey() { return weekKey(new Date()); }
 export function planForWeek(weekPlan, wk) { return weekPlan[wk] || {}; }
 export function currentPlan(weekPlan) { return planForWeek(weekPlan, currentWeekKey()); }
 
+// shift an ISO week key by ±delta weeks (handles year rollovers)
+export function shiftWeek(wk, delta) {
+  const m = wk.match(/^(\d{4})-W(\d{2})$/); if (!m) return wk;
+  const jan4 = new Date(Date.UTC(+m[1], 0, 4));
+  const jan4Day = (jan4.getUTCDay() + 6) % 7;
+  const week1Mon = new Date(jan4); week1Mon.setUTCDate(jan4.getUTCDate() - jan4Day);
+  const mon = new Date(week1Mon); mon.setUTCDate(week1Mon.getUTCDate() + (+m[2] - 1) * 7 + delta * 7);
+  return weekKey(mon);
+}
+export function prevWeekKey(wk) { return shiftWeek(wk, -1); }
+export function nextWeekKey(wk) { return shiftWeek(wk, 1); }
+
 // convert "2026-W27" + "Wed" into an ISO date
 export function dateOfWeekDay(wk, day) {
   const m = wk.match(/^(\d{4})-W(\d{2})$/); if (!m) return null;

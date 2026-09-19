@@ -104,7 +104,7 @@ export default function Expenses() {
       )}
 
       {modal && (
-        <div className="overlay" onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }}>
+        <div className="modalBg" onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }}>
           <div className="modal card">
             <h3>Log an expense</h3>
             <label>Date</label>

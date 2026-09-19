@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useStore, signIn } from './store';
 import { api } from './api';
+import { prevWeekKey, nextWeekKey, currentWeekKey } from './utils';
 
 export function Section({ children }) {
   return <h2 className="section">{children}</h2>;
@@ -22,6 +23,21 @@ export function Pill({ status }) {
 
 export function Empty({ children }) {
   return <div className="empty">{children}</div>;
+}
+
+export function WeekNav() {
+  const wk = useStore((s) => s.planWeek);
+  const set = useStore.getState().set;
+  const cur = currentWeekKey();
+  const setWeek = (k) => set({ planWeek: k, routeResult: null });
+  return (
+    <div className="weekNav">
+      <button className="ghost small" onClick={() => setWeek(prevWeekKey(wk))}>‹ Previous</button>
+      <span className="weekLabel">{wk}{wk === cur ? ' · this week' : ''}</span>
+      <button className="ghost small" onClick={() => setWeek(nextWeekKey(wk))}>Next ›</button>
+      {wk !== cur && <button className="ghost small" onClick={() => setWeek(cur)}>This week</button>}
+    </div>
+  );
 }
 
 export function Toast() {

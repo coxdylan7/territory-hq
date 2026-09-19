@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { api } from '../api';
-import { currentPlan, currentWeekKey, daysSince, geocode } from '../utils';
+import { planForWeek, daysSince, geocode } from '../utils';
 import { setPlanDay, creditBalance } from '../actions';
-import { Pill, Empty } from '../components';
+import { Pill, Empty, WeekNav } from '../components';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -14,7 +14,7 @@ export default function Accounts() {
 
   let rows = [...accounts];
   if (acctSort === 'overdue') rows.sort((a, b) => daysSince(b.lastVisited) - daysSince(a.lastVisited));
-  const plan = currentPlan(st.weekPlan);
+  const plan = planForWeek(st.weekPlan, st.planWeek);
 
   async function onChangePlan(id, day) {
     await setPlanDay(id, day);
@@ -24,7 +24,8 @@ export default function Accounts() {
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <h2 className="disp" style={{ fontSize: 20 }}>Accounts</h2>
-        <div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <WeekNav />
           <button className="ghost" onClick={() => set({ acctSort: acctSort === 'overdue' ? 'recent' : 'overdue' })}>
             {acctSort === 'overdue' ? 'Sorted: needs a visit first' : 'Sort by last visit'}
           </button>
@@ -32,7 +33,7 @@ export default function Accounts() {
         </div>
       </div>
       <div className="muted" style={{ margin: '6px 0 14px' }}>
-        The <b>This week</b> column sets each account's visit day for the current week ({currentWeekKey()}). It resets to a blank plan each new week; past weeks are kept in the Route Log.
+        The <b>This week</b> column sets each account's visit day for week <b>{st.planWeek}</b>. It resets to a blank plan each new week; past weeks are kept in the Route Log.
       </div>
 
       {rows.length === 0 ? <Empty>No accounts yet. Add one manually, or pull candidates from OCM Watch.</Empty> : (

@@ -1,15 +1,16 @@
 import { useStore, validGmapsKey } from '../store';
-import { currentWeekKey, currentPlan, optimizeRoute, optimizeRouteGoogle, optimizeRouteOSRM, mapsUrls } from '../utils';
+import { planForWeek, optimizeRoute, optimizeRouteGoogle, optimizeRouteOSRM, mapsUrls } from '../utils';
 import { completeRoute, setPlanDay } from '../actions';
-import { MapView, Empty } from '../components';
+import { MapView, Empty, WeekNav } from '../components';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function RouteTab() {
   const st = useStore();
   const { set } = st;
+  const wk = st.planWeek;
   const day = st.routeDay || st.settings.workDays[0] || 'Mon';
-  const plan = currentPlan(st.weekPlan);
+  const plan = planForWeek(st.weekPlan, wk);
   const dayStops = st.accounts.filter((a) => plan[a.id] === day);
   const home = st.settings.homeLat != null ? { lat: st.settings.homeLat, lng: st.settings.homeLng } : null;
   const gmapsKey = validGmapsKey(st.settings.gmapsKey);
@@ -146,15 +147,18 @@ export default function RouteTab() {
 
   return (
     <>
-      <h2 className="disp" style={{ fontSize: 20 }}>Weekly route <span className="muted" style={{ fontSize: 13 }}>{currentWeekKey()}</span></h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 2 }}>
+        <h2 className="disp" style={{ fontSize: 20 }}>Weekly route <span className="muted" style={{ fontSize: 13 }}>{wk}</span></h2>
+        <WeekNav />
+      </div>
       <div className="muted" style={{ marginBottom: 14, maxWidth: 620 }}>
         {usingGoogle ? 'Optimized with live Google driving directions.' : 'Optimized with free OpenStreetMap driving directions — no API key needed.'}
-        {' '}Reads this week's plan from Accounts. Priority-override accounts are always visited first.
+        {' '}Reads the selected week's plan from Accounts. Priority-override accounts are always visited first.
       </div>
       <div style={{ marginBottom: 16 }}>{dayCounts}</div>
       {body}
 
-      <h2 className="section">Add accounts to {day} (this week)</h2>
+      <h2 className="section">Add accounts to {day} ({wk})</h2>
       {others.length === 0 ? (
         <div className="muted">Every account is already on {day} this week.</div>
       ) : (

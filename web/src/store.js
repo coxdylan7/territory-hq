@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, setSessionHooks, getToken, setToken, clearToken } from './api';
+import { currentWeekKey } from './utils';
 
 const DEFAULT_SETTINGS = {
   homeAddress: '', homeLat: null, homeLng: null, counties: [], workDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
@@ -22,6 +23,7 @@ export const useStore = create((set, get) => ({
   user: null,
   tab: 'dashboard',
   routeDay: null,
+  planWeek: currentWeekKey(),
   routeResult: null,
   routeLoading: false,
   routeError: '',
