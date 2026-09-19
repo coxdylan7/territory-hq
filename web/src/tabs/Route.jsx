@@ -1,9 +1,16 @@
 import { useStore, validGmapsKey } from '../store';
-import { planForWeek, optimizeRoute, optimizeRouteGoogle, optimizeRouteOSRM, mapsUrls } from '../utils';
+import { planForWeek, daysSince, optimizeRoute, optimizeRouteGoogle, optimizeRouteOSRM, mapsUrls } from '../utils';
 import { completeRoute, setPlanDay } from '../actions';
 import { MapView, Empty, WeekNav } from '../components';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function VisitBadge({ acc }) {
+  if (!acc || !acc.lastVisited) return <span className="lvBadge never">never visited</span>;
+  const ds = daysSince(acc.lastVisited);
+  if (ds === Infinity) return <span className="lvBadge soon">last visit: never</span>;
+  return <span className={`lvBadge ${ds >= 21 ? 'soon' : 'ok'}`}>last {ds}d ago · {acc.lastVisited}</span>;
+}
 
 export default function RouteTab() {
   const st = useStore();
@@ -94,7 +101,7 @@ export default function RouteTab() {
               {dayStops.map((s) => (
                 <div className="stopRow" key={s.id}>
                   <div className="stopNum">{s.priority ? '★' : '•'}</div>
-                  <div style={{ flex: 1 }}><b>{s.name}</b><div className="muted">{s.address}, {s.city}{s.lat == null ? ' — ⚠️ no location found' : ''}</div></div>
+                  <div style={{ flex: 1 }}><b>{s.name}</b><VisitBadge acc={s} /><div className="muted">{s.address}, {s.city}{s.lat == null ? ' — ⚠️ no location found' : ''}</div></div>
                 </div>
               ))}
               {dayStops.filter((s) => s.lat == null).length > 0 && (
@@ -117,6 +124,7 @@ export default function RouteTab() {
                   <div className="stopNum">{s.isHome ? 'H' : i + 1}</div>
                   <div style={{ flex: 1 }}>
                     <b>{s.isHome ? 'Back home' : s.name}</b> {s.priority ? <span className="priority">★</span> : ''}
+                    {!s.isHome && <VisitBadge acc={s} />}
                     <div className="muted">{s.isHome ? '' : `${s.address}, ${s.city} — `}{s.distanceText || ''}{s.durationText ? ' · ' + s.durationText : ''}</div>
                   </div>
                 </div>
