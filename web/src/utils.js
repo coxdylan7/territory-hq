@@ -2,26 +2,33 @@
 
 /* ---------------- ISO week helpers ---------------- */
 export function weekKey(d) {
-  d = d ? new Date(d) : new Date();
-  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  let y, mo, da;
+  if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    y = +d.slice(0, 4); mo = +d.slice(5, 7); da = +d.slice(8, 10); // treat date-only strings literally
+  } else {
+    const dt = d ? new Date(d) : new Date();
+    y = dt.getFullYear(); mo = dt.getMonth() + 1; da = dt.getDate();
+  }
+  const dt = new Date(Date.UTC(y, mo - 1, da));
   const dayNum = (dt.getUTCDay() + 6) % 7;           // Mon=0
   dt.setUTCDate(dt.getUTCDate() - dayNum + 3);         // nearest Thursday
-  const firstThu = new Date(Date.UTC(dt.getUTCFullYear(), 0, 4));
+  const year = dt.getUTCFullYear();
+  const firstThu = new Date(Date.UTC(year, 0, 4));
   const wk = 1 + Math.round(((dt - firstThu) / 86400000 - 3 + ((firstThu.getUTCDay() + 6) % 7)) / 7);
-  return `${dt.getUTCFullYear()}-W${String(wk).padStart(2, '0')}`;
+  return `${year}-W${String(wk).padStart(2, '0')}`;
 }
 export function currentWeekKey() { return weekKey(new Date()); }
 export function planForWeek(weekPlan, wk) { return weekPlan[wk] || {}; }
 export function currentPlan(weekPlan) { return planForWeek(weekPlan, currentWeekKey()); }
 
-// shift an ISO week key by ±delta weeks (handles year rollovers)
+// shift an ISO week key by ±delta weeks (handles year rollovers, no timezone drift)
 export function shiftWeek(wk, delta) {
   const m = wk.match(/^(\d{4})-W(\d{2})$/); if (!m) return wk;
   const jan4 = new Date(Date.UTC(+m[1], 0, 4));
   const jan4Day = (jan4.getUTCDay() + 6) % 7;
-  const week1Mon = new Date(jan4); week1Mon.setUTCDate(jan4.getUTCDate() - jan4Day);
-  const mon = new Date(week1Mon); mon.setUTCDate(week1Mon.getUTCDate() + (+m[2] - 1) * 7 + delta * 7);
-  return weekKey(mon);
+  const week1Mon = new Date(Date.UTC(+m[1], 0, 4 - jan4Day)); // Monday of week 1
+  week1Mon.setUTCDate(week1Mon.getUTCDate() + (+m[2] - 1 + delta) * 7);
+  return weekKey(week1Mon.toISOString().slice(0, 10));
 }
 export function prevWeekKey(wk) { return shiftWeek(wk, -1); }
 export function nextWeekKey(wk) { return shiftWeek(wk, 1); }

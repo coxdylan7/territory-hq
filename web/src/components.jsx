@@ -32,7 +32,7 @@ export function WeekNav() {
   const setWeek = (k) => set({ planWeek: k, routeResult: null });
   return (
     <div className="weekNav">
-      <button className="ghost small" onClick={() => setWeek(prevWeekKey(wk))}>‹ Previous</button>
+      {wk !== cur && <button className="ghost small" onClick={() => setWeek(prevWeekKey(wk))}>‹ Previous</button>}
       <span className="weekLabel">{wk}{wk === cur ? ' · this week' : ''}</span>
       <button className="ghost small" onClick={() => setWeek(nextWeekKey(wk))}>Next ›</button>
       {wk !== cur && <button className="ghost small" onClick={() => setWeek(cur)}>This week</button>}
