@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { api } from '../api';
+import { expenseValue } from '../utils';
 import { Stat, Section } from '../components';
 
 const CATEGORIES = ['Mileage', 'Promo', 'Travel', 'Food', 'Supplies', 'Other'];
@@ -13,13 +14,13 @@ export default function Expenses() {
   const firstOfMonth = new Date().toISOString().slice(0, 7) + '-01';
   const entries = [...st.expenses].sort((a, b) => b.date.localeCompare(a.date));
 
+  const rate = st.settings.mileageRate;
   const monthTotals = st.expenses.filter((e) => e.date >= firstOfMonth);
-  const monthSpend = monthTotals.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const monthSpend = monthTotals.reduce((s, e) => s + expenseValue(e, rate), 0);
   const monthMiles = monthTotals.reduce((s, e) => s + Number(e.miles || 0), 0);
   const lastWeekDate = (() => { const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().slice(0, 10); })();
-  const weekSpend = st.expenses.filter((e) => e.date >= lastWeekDate).reduce((s, e) => s + Number(e.amount || 0), 0);
-  const weekMiles = st.expenses.filter((e) => e.date >= lastWeekDate).reduce((s, e) => s + Number(e.miles || 0), 0);
-  const totalSpend = st.expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const weekSpend = st.expenses.filter((e) => e.date >= lastWeekDate).reduce((s, e) => s + expenseValue(e, rate), 0);
+  const totalSpend = st.expenses.reduce((s, e) => s + expenseValue(e, rate), 0);
 
   const loggedDays = new Set(st.routeLog.map((l) => l.date));
   let streak = 0;
@@ -34,12 +35,15 @@ export default function Expenses() {
 
   async function saveExpense() {
     if (!modal) return;
+    const miles = Math.round((Number(modal.miles) || 0) * 10) / 10;
+    let amount = Number(modal.amount) || 0;
+    if (modal.category === 'Mileage' && amount <= 0 && miles > 0) amount = Math.round(miles * rate * 100) / 100;
     const rec = {
       id: 'e' + Date.now(),
       date: modal.date || today,
       category: modal.category || 'Mileage',
-      amount: Number(modal.amount) || 0,
-      miles: Math.round((Number(modal.miles) || 0) * 10) / 10,
+      amount,
+      miles,
       notes: (modal.desc || '').trim(),
     };
     try {
@@ -64,12 +68,12 @@ export default function Expenses() {
       <div className="muted" style={{ margin: '6px 0 14px' }}>Log your field expenses so the reports stay honest. Mileage entries with a miles value are tracked against your IRS mileage rate for reimbursement estimates.</div>
       <div className="cards4">
         <Stat num={'$' + monthSpend.toFixed(0)} lbl="Spent this month" />
-        <Stat num={(weekMiles * st.settings.mileageRate + weekSpend).toFixed(0) + '/wk'} lbl="Est. weekly cost" />
+        <Stat num={'$' + weekSpend.toFixed(0) + '/wk'} lbl="Est. weekly cost" />
         <Stat num={monthMiles.toFixed(0) + ' mi'} lbl="Driven this month" />
-        <Stat num={totalSpend.toFixed(0)} lbl="All time" />
+        <Stat num={'$' + totalSpend.toFixed(0)} lbl="All time" />
       </div>
       <div className="muted" style={{ margin: '4px 0 14px' }}>
-        Mileage rate: ${st.settings.mileageRate.toFixed(2)}/mi · Est. mileage reimbursement this month: <b>${(monthMiles * st.settings.mileageRate).toFixed(2)}</b> · Work-day route streak: <b>{streak} day(s)</b>
+        Mileage rate: ${rate.toFixed(2)}/mi — mileage rows are valued at this rate and are included in the totals. · Work-day route streak: <b>{streak} day(s)</b>
       </div>
 
       <div className="flexEnd" style={{ justifyContent: 'flex-start', marginBottom: 14 }}>
@@ -87,7 +91,7 @@ export default function Expenses() {
               <tr key={e.id}>
                 <td data-label="Date"><b>{e.date}</b></td>
                 <td data-label="Category"><span className="pill">{e.category}</span></td>
-                <td data-label="Amount">${Number(e.amount || 0).toFixed(2)}</td>
+                <td data-label="Amount">${expenseValue(e, rate).toFixed(2)}</td>
                 <td data-label="Miles">{e.miles ? e.miles + ' mi' : ''}</td>
                 <td data-label="Details" className="muted">{(e.notes || '').slice(0, 60)}</td>
                 <td data-label="">
@@ -112,7 +116,9 @@ export default function Expenses() {
             {modal.category === 'Mileage' ? (
               <div className="grid2">
                 <div><label>Miles driven</label><input type="number" step="0.1" value={modal.miles} placeholder="e.g. 42" onChange={(e) => setModal({ ...modal, miles: e.target.value })} /></div>
-                <div><label>Amount (optional)</label><input type="number" step="0.01" value={modal.amount} placeholder="0.00" onChange={(e) => setModal({ ...modal, amount: e.target.value })} /></div>
+                <div><label>Amount (optional)</label><input type="number" step="0.01" value={modal.amount} placeholder="0.00" onChange={(e) => setModal({ ...modal, amount: e.target.value })} />
+                  {Number(modal.amount) <= 0 && Number(modal.miles) > 0 && <div className="muted" style={{ fontSize: 12 }}>= ${((Number(modal.miles) || 0) * rate).toFixed(2)} at ${rate.toFixed(2)}/mi (auto-filled)</div>}
+                </div>
               </div>
             ) : (
               <div><label>Amount ($)</label><input type="number" step="0.01" value={modal.amount} placeholder="0.00" onChange={(e) => setModal({ ...modal, amount: e.target.value })} /></div>

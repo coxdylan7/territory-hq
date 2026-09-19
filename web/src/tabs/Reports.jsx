@@ -1,5 +1,5 @@
 import { useStore } from '../store';
-import { daysSince } from '../utils';
+import { daysSince, expenseValue } from '../utils';
 import { Stat, Section, Pill } from '../components';
 
 const PERIODS = ['day', 'week', 'month', 'quarter'];
@@ -42,10 +42,9 @@ export default function Reports() {
   const routesRun = logs.length;
 
   const exp = st.expenses.filter((e) => inRange(e.date));
-  const totalSpend = exp.reduce((s, e) => s + Number(e.amount || 0), 0);
-  const mileageReimb = exp.filter((e) => e.category === 'Mileage').reduce((s, e) => s + Number(e.miles || 0) * st.settings.mileageRate, 0);
+  const totalSpend = exp.reduce((s, e) => s + expenseValue(e, st.settings.mileageRate), 0);
   const byCat = {};
-  exp.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + Number(e.amount || 0); });
+  exp.forEach((e) => { byCat[e.category] = (byCat[e.category] || 0) + expenseValue(e, st.settings.mileageRate); });
 
   const newStores = st.ocmResults.filter((r) => inRange(r.retail_date_opened_to_public));
 
@@ -104,8 +103,7 @@ New OCM stores opened: ${newStores.length}`;
     <div class="kpi"><div class="n">${msgsInRange.length}</div><div class="l">Messages</div></div>
   </div>
   <h2>Expenses by category</h2>
-  <table>${Object.keys(byCat).length ? Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => row(c, '$' + v.toFixed(2))).join('') : row('None', '')}
-    ${row('<b>Est. mileage reimbursement</b>', '<b>$' + mileageReimb.toFixed(2) + '</b>')}</table>
+  <table>${Object.keys(byCat).length ? Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => row(c, '$' + v.toFixed(2))).join('') : row('None', '')}</table>
   <h2>Coverage & activity</h2>
   <table>${row('Unique accounts visited', uniq.size + ' of ' + st.accounts.length)}
     ${row('Credits issued', creditsInRange.length + ' entries (' + creditsTotal + ' credits)')}
@@ -167,9 +165,6 @@ New OCM stores opened: ${newStores.length}`;
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: 13 }} key={c}><span>{c}</span><span>${v.toFixed(2)}</span></div>
             ))
             : <div className="muted">None</div>}
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', borderTop: '1px solid var(--line)', marginTop: 6, fontWeight: 600, fontSize: 13 }}>
-            <span>Est. mileage reimbursement</span><span>${mileageReimb.toFixed(2)}</span>
-          </div>
         </div>
         <div className="card" style={{ flex: 1, minWidth: 240 }}>
           <div className="muted" style={{ marginBottom: 6 }}>Activity</div>

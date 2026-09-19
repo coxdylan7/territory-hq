@@ -35,6 +35,15 @@ export function daysSince(dateStr) {
 
 export function todayStr() { return new Date().toISOString().slice(0, 10); }
 
+// Dollar value of an expense row. Mileage is valued at miles × rate so a row
+// that logged miles but no amount (or was saved before amounts were computed)
+// never shows a misleading $0.
+export function expenseValue(e, rate) {
+  const amt = Number(e && e.amount || 0);
+  if (e && e.category === 'Mileage' && amt <= 0 && e.miles) return Math.round(Number(e.miles) * (rate || 0) * 100) / 100;
+  return Math.round(amt * 100) / 100;
+}
+
 /* ---------------- pending reviews + recommendations ---------------- */
 export function pendingReviews(weekPlan, routeLog) {
   const loggedDates = new Set(routeLog.map((l) => l.date));

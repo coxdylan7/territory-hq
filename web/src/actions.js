@@ -61,7 +61,8 @@ export async function completeRoute(date, day, stops, miles, minutes) {
     accounts = accounts.map((a) => a.id === acc.id ? updated : a);
   }
   const names = stops.map((s) => s.name).join(', ');
-  const expense = { id: 'e' + Date.now(), date, category: 'Mileage', amount: 0, miles: Math.round((miles || 0) * 10) / 10, notes: `Route ${day} ${date}: ${names}` };
+  const roundedMiles = Math.round((miles || 0) * 10) / 10;
+  const expense = { id: 'e' + Date.now(), date, category: 'Mileage', amount: Math.round(roundedMiles * (st.settings.mileageRate || 0) * 100) / 100, miles: roundedMiles, notes: `Route ${day} ${date}: ${names}` };
   await api.post('/api/expenses', expense);
   const logEntry = { id: 'log' + Date.now(), date, day, stops, miles: miles || 0, minutes: minutes || 0 };
   await api.post('/api/route-log', logEntry);
