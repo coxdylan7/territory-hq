@@ -1,4 +1,4 @@
-import { useStore } from '../store';
+import { useStore, validGmapsKey } from '../store';
 import { currentWeekKey, currentPlan, optimizeRoute, optimizeRouteGoogle, optimizeRouteOSRM, mapsUrls } from '../utils';
 import { completeRoute, setPlanDay } from '../actions';
 import { MapView, Empty } from '../components';
@@ -12,7 +12,8 @@ export default function RouteTab() {
   const plan = currentPlan(st.weekPlan);
   const dayStops = st.accounts.filter((a) => plan[a.id] === day);
   const home = st.settings.homeLat != null ? { lat: st.settings.homeLat, lng: st.settings.homeLng } : null;
-  const usingGoogle = !!st.settings.gmapsKey;
+  const gmapsKey = validGmapsKey(st.settings.gmapsKey);
+  const usingGoogle = !!gmapsKey;
   const r = st.routeResult;
   const showingResult = r && r.day === day;
 
@@ -22,7 +23,7 @@ export default function RouteTab() {
     try {
       let result;
       if (usingGoogle) {
-        result = await optimizeRouteGoogle(home, dayStops, st.settings.gmapsKey);
+        result = await optimizeRouteGoogle(home, dayStops, gmapsKey);
       } else {
         try {
           result = await optimizeRouteOSRM(home, dayStops);

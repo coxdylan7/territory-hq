@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useStore } from '../store';
+import { useStore, validGmapsKey } from '../store';
 import { api } from '../api';
 import { geocode } from '../utils';
 import { Section } from '../components';
@@ -33,8 +33,9 @@ export default function Settings() {
   async function save() {
     setSaveMsg('');
     try {
-      await api.put('/api/settings', s);
-      set({ settings: s });
+      const toSave = { ...s, gmapsKey: validGmapsKey(s.gmapsKey) };
+      await api.put('/api/settings', toSave);
+      set({ settings: toSave });
       setDirty(false);
       setSaveMsg('Saved.');
       setTimeout(() => setSaveMsg(''), 2000);
@@ -62,6 +63,7 @@ export default function Settings() {
   }
 
   const keyVal = s ? s.gmapsKey : '';
+  const keyInvalid = keyVal && !validGmapsKey(keyVal);
   const home = s && s.homeLat != null;
 
   return (
@@ -123,6 +125,7 @@ export default function Settings() {
               onChange={(e) => setState({ settings: { ...s, gmapsKey: e.target.value.trim() }, dirty: true })}
               placeholder="AIza..." />
             <div className="muted" style={{ fontSize: 12 }}>Optional — routes already work free via OpenStreetMap with no key. Adding a Google key upgrades to live Google driving directions (traffic-aware) and more reliable geocoding. Get one at the Google Cloud Console and enable Maps JavaScript + Directions APIs.</div>
+            {keyInvalid && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 4 }}>That doesn&rsquo;t look like a Google Maps key (they start with <b>AIza</b>), so it&rsquo;s being ignored and won&rsquo;t be saved.</div>}
           </div>
           <div>
             <div style={{ height: 14 }} />

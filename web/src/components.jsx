@@ -40,9 +40,8 @@ export function MapView({ home, stops, line, height = 340, fit = true }) {
   const mapRef = useRef(null);
   useEffect(() => {
     if (!ref.current || mapRef.current) return;
-    const map = L.map(ref.current, { zoomControl: true, attributionControl: true });
+    const map = L.map(ref.current, { zoomControl: true, attributionControl: false });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
       maxZoom: 19,
     }).addTo(map);
     mapRef.current = map;

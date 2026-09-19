@@ -3,8 +3,15 @@ import { api, setSessionHooks, getToken, setToken, clearToken } from './api';
 
 const DEFAULT_SETTINGS = {
   homeAddress: '', homeLat: null, homeLng: null, counties: [], workDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-  mileageRate: 0.70, gmapsKey: '', defaultCredit: 0, alertEmail: '',
+  mileageRate: 0.70, gmapsKey: '', cartoKey: '', defaultCredit: 0, alertEmail: '',
 };
+
+// A Google Maps key must look like "AIza...". Anything else (typos, passwords,
+// junk) is treated as no key so it can never break geocoding or routing.
+export function validGmapsKey(k) {
+  const v = (k || '').trim();
+  return /^AIza[A-Za-z0-9_-]{10,}$/.test(v) ? v : '';
+}
 
 let toastTimer = null;
 
@@ -76,7 +83,7 @@ export const useStore = create((set, get) => ({
         api.get('/api/messages'),
       ]);
       set({
-        settings: { ...DEFAULT_SETTINGS, ...settings },
+        settings: { ...DEFAULT_SETTINGS, ...settings, gmapsKey: validGmapsKey(settings && settings.gmapsKey) },
         accounts: (accounts || []).map((a) => ({ ...a, lastVisited: a.lastVisited || null })),
         expenses: normDate(expenses),
         ocmSeen,

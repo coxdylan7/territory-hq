@@ -153,12 +153,20 @@ function gate(handler) {
 }
 
 /* ================= settings ================= */
+// A Google Maps key must look like "AIza...". Anything else (typos, passwords,
+// junk keys from other providers) is treated as no key so it can never break
+// geocoding or routing.
+function validGmapsKey(k) {
+  const v = String(k || '').trim();
+  return /^AIza[A-Za-z0-9_-]{10,}$/.test(v) ? v : '';
+}
+
 app.get('/api/settings', gate(async (req, res, user) => {
   const r = (await sql`SELECT * FROM settings WHERE user_id = ${user.id}`)[0];
   return json(res, {
     homeAddress: (r && r.home_address) || '', homeLat: r ? r.home_lat : null, homeLng: r ? r.home_lng : null,
     counties: JSON.parse((r && r.counties) || '[]'), workDays: JSON.parse((r && r.work_days) || '["Mon","Tue","Wed","Thu","Fri"]'),
-    mileageRate: r && r.mileage_rate != null ? r.mileage_rate : 0.70, gmapsKey: (r && r.gmaps_key) || '',
+    mileageRate: r && r.mileage_rate != null ? r.mileage_rate : 0.70, gmapsKey: validGmapsKey(r && r.gmaps_key),
     defaultCredit: (r && r.default_credit) || 0, alertEmail: (r && r.alert_email) || '',
   });
 }));
@@ -167,7 +175,7 @@ app.put('/api/settings', gate(async (req, res, user) => {
   const s = req.body || {};
   await sql`
     INSERT INTO settings (user_id, home_address, home_lat, home_lng, counties, work_days, mileage_rate, gmaps_key, default_credit, alert_email)
-    VALUES (${user.id}, ${s.homeAddress || ''}, ${s.homeLat ?? null}, ${s.homeLng ?? null}, ${JSON.stringify(s.counties || [])}, ${JSON.stringify(s.workDays || [])}, ${s.mileageRate ?? 0.70}, ${s.gmapsKey || ''}, ${s.defaultCredit || 0}, ${s.alertEmail || ''})
+    VALUES (${user.id}, ${s.homeAddress || ''}, ${s.homeLat ?? null}, ${s.homeLng ?? null}, ${JSON.stringify(s.counties || [])}, ${JSON.stringify(s.workDays || [])}, ${s.mileageRate ?? 0.70}, ${validGmapsKey(s.gmapsKey)}, ${s.defaultCredit || 0}, ${s.alertEmail || ''})
     ON CONFLICT (user_id) DO UPDATE SET
       home_address = excluded.home_address, home_lat = excluded.home_lat, home_lng = excluded.home_lng,
       counties = excluded.counties, work_days = excluded.work_days, mileage_rate = excluded.mileage_rate,
