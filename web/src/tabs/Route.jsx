@@ -5,11 +5,11 @@ import { MapView, Empty, WeekNav } from '../components';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function VisitBadge({ acc }) {
-  if (!acc || !acc.lastVisited) return <span className="lvBadge never">never visited</span>;
+function VisitBadge({ acc, compact }) {
+  if (!acc || !acc.lastVisited) return <span className={`lvBadge never${compact ? ' lvChip' : ''}`}>{compact ? 'new' : 'never visited'}</span>;
   const ds = daysSince(acc.lastVisited);
   if (ds === Infinity) return <span className="lvBadge soon">last visit: never</span>;
-  return <span className={`lvBadge ${ds >= 21 ? 'soon' : 'ok'}`}>last {ds}d ago · {acc.lastVisited}</span>;
+  return <span className={`lvBadge ${ds >= 21 ? 'soon' : 'ok'}${compact ? ' lvChip' : ''}`}>{compact ? `${ds}d` : `last ${ds}d ago · ${acc.lastVisited}`}</span>;
 }
 
 export default function RouteTab() {
@@ -174,6 +174,7 @@ export default function RouteTab() {
           {others.map((a) => (
             <span key={a.id} className="countyChip" onClick={() => quickAssign(a.id)}>
               + {a.name}{plan[a.id] ? <span className="muted"> ({plan[a.id]})</span> : ''}
+              <VisitBadge acc={a} compact />
             </span>
           ))}
         </div>

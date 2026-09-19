@@ -227,6 +227,7 @@ canvas{background:linear-gradient(180deg,#0c1321,#0a0f19);border-radius:9px;}
 .lvBadge.ok{color:#5eead4;background:rgba(20,184,166,.12);border:1px solid rgba(20,184,166,.35);}
 .lvBadge.soon{color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.35);}
 .lvBadge.never{color:#5b6a83;background:rgba(91,106,131,.1);border:1px solid rgba(91,106,131,.3);}
+.lvBadge.lvChip{font-size:10px;padding:0 6px;margin-left:6px;vertical-align:0;}
 .toast{
   position:fixed;bottom:22px;right:22px;background:rgba(14,20,31,.95);border:1px solid rgba(45,212,191,.4);
   border-left:3px solid var(--brand);padding:12px 18px;border-radius:14px;font-size:13px;z-index:99;
