@@ -1,0 +1,19 @@
+{
+  "name": "territory-portal-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Territory Portal REST API (Express + Supabase Postgres)",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20.6"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "postgres": "^3.4.5"
+  }
+}

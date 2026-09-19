@@ -1,5 +1,7 @@
 node_modules/
 web/dist/
+portal/node_modules/
+portal/web/dist/
 .git/
 .gitignore
 .env

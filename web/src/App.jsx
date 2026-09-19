@@ -11,6 +11,7 @@ import Credits from './tabs/Credits';
 import Reports from './tabs/Reports';
 import Messages from './tabs/Messages';
 import Expenses from './tabs/Expenses';
+import Bookings from './tabs/Bookings';
 import Settings from './tabs/Settings';
 import Admin from './tabs/Admin';
 
@@ -21,6 +22,7 @@ const TABS = [
   ['route', 'Weekly Route', '🗺️'],
   ['log', 'Route Log', '📓'],
   ['marketing', 'Credits', '💳'],
+  ['bookings', 'Bookings', '🎟️'],
   ['reports', 'Reports', '📊'],
   ['messages', 'Messages', '✉️'],
   ['expenses', 'Expenses', '💵'],
@@ -55,6 +57,7 @@ function CurrentTab() {
     case 'route': return <RouteTab />;
     case 'log': return <RouteLog />;
     case 'marketing': return <Credits />;
+    case 'bookings': return <Bookings />;
     case 'reports': return <Reports />;
     case 'messages': return <Messages />;
     case 'expenses': return <Expenses />;
@@ -65,14 +68,16 @@ function CurrentTab() {
 }
 
 function Nav() {
-  const { tab, set, user, logout, accounts, weekPlan, routeLog, ocmResults, ocmSeen } = useStore();
+  const { tab, set, user, logout, accounts, weekPlan, routeLog, ocmResults, ocmSeen, bookings } = useStore();
 
   const plan = currentPlan(weekPlan);
   void plan; void routeLog;
   const newCount = ocmResults.filter((r) => !ocmSeen.includes(r.license_number)).length;
   const reviewCount = pendingReviews(weekPlan, routeLog).length;
+  const bookingCount = bookings.filter((b) => b.status === 'requested').length;
   const badgeFor = (id) => {
     if (id === 'dashboard' && reviewCount > 0) return reviewCount;
+    if (id === 'bookings' && bookingCount > 0) return bookingCount;
     if (id === 'ocm' && newCount > 0) return newCount;
     return null;
   };

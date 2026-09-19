@@ -54,6 +54,14 @@ export function daysSince(dateStr) {
 
 export function todayStr() { return new Date().toISOString().slice(0, 10); }
 
+// credit cost of an event booking: base + extra hours beyond the base duration
+export function creditEstimate(et, hours) {
+  if (!et) return 0;
+  const h = Math.max(0, Number(hours) || 0);
+  const baseH = Number(et.baseHours) || 0;
+  return Math.round((Number(et.basePriceCredits) || 0) + Math.max(0, h - baseH) * (Number(et.extraHourCredits) || 0));
+}
+
 // Dollar value of an expense row. Mileage is valued at miles × rate so a row
 // that logged miles but no amount (or was saved before amounts were computed)
 // never shows a misleading $0.

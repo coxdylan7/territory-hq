@@ -147,7 +147,34 @@ export default function Dashboard() {
           <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }} className="disp">{routeLog.length}</div>
         </div>
       </div>
+
+      <UpcomingBookingStrip bookings={st.bookings} accounts={accounts} />
       {accounts.length === 0 && <Empty>No accounts yet. Add one manually, or pull candidates from OCM Watch.</Empty>}
+    </>
+  );
+}
+
+function UpcomingBookingStrip({ bookings, accounts }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const in7 = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
+  const up = (bookings || [])
+    .filter((b) => b.status === 'approved' && b.date >= today && b.date <= in7)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!up.length) return null;
+  const addr = (id) => { const a = accounts.find((x) => x.id === id); return a && a.address ? `${a.address}, ${a.city}` : ''; };
+  return (
+    <>
+      <Section>🎟️ Upcoming activations & trainings</Section>
+      <div className="row">
+        {up.map((b) => (
+          <div className="card" key={b.id} style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 13, color: 'var(--amber)', fontWeight: 700 }}>{b.date}</div>
+            <div style={{ fontWeight: 600, marginTop: 2 }}>{b.eventTypeName}</div>
+            <div className="muted">{b.accountName}{b.ambassadorName ? ` · ${b.ambassadorName}` : ''}</div>
+            {addr(b.accountId) && <a className="btnLink" style={{ fontSize: 12 }} href={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr(b.accountId))} target="_blank" rel="noreferrer">Open in Maps →</a>}
+          </div>
+        ))}
+      </div>
     </>
   );
 }
