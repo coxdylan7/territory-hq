@@ -167,6 +167,11 @@ const STATEMENTS = [
     created_at TEXT,
     updated_at TEXT
   )`,
+  // migrate legacy portal roles to the new role set (idempotent)
+  `UPDATE portal_users SET role = 'store_manager' WHERE role = 'client'`,
+  `UPDATE portal_users SET role = 'brand_ambassador' WHERE role = 'staff'`,
+  `UPDATE portal_invites SET role = 'store_manager' WHERE role = 'client'`,
+  `UPDATE portal_invites SET role = 'brand_ambassador' WHERE role = 'staff'`,
 ];
 
 let done = false;

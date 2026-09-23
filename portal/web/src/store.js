@@ -35,10 +35,10 @@ export const useStore = create((set, get) => ({
     const u = me || get().user;
     if (!u) return;
     const calls = [api.get('/api/event-types'), api.get('/api/bookings')];
-    if (u.role === 'client') calls.push(api.get('/api/balance'));
+    if (u.role !== 'brand_ambassador') calls.push(api.get('/api/balance'));
     try {
       const [eventTypes, bookings, balance] = await Promise.all(calls);
-      set({ eventTypes, bookings, balance: u.role === 'client' ? balance.balance : null });
+      set({ eventTypes, bookings, balance: u.role !== 'brand_ambassador' ? balance.balance : null });
     } catch (e) {}
   },
 
@@ -64,6 +64,21 @@ export const useStore = create((set, get) => ({
 
   async cancelBooking(id) {
     await api.put('/api/bookings/' + id + '/cancel', {});
+    await get().refresh();
+  },
+
+  async acceptBooking(id) {
+    await api.put('/api/bookings/' + id + '/accept', {});
+    await get().refresh();
+  },
+
+  async declineAssignment(id) {
+    await api.put('/api/bookings/' + id + '/decline-assignment', {});
+    await get().refresh();
+  },
+
+  async completeBooking(id) {
+    await api.put('/api/bookings/' + id + '/complete', {});
     await get().refresh();
   },
 }));

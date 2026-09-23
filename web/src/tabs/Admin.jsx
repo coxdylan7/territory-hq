@@ -30,6 +30,19 @@ export default function Admin() {
     } catch (err) { setMsg('Update failed: ' + err.message); }
   }
 
+  async function removeUser(u) {
+    if (!confirm(`Permanently delete ${u.email}? This removes their sessions, portal users and invites. This cannot be undone.`)) return;
+    if (!confirm(`Really delete ${u.email}? Type nothing to cancel — this is permanent.`)) return;
+    setMsg('');
+    try {
+      await api.del('/api/admin/users/' + u.id);
+      setMsg('Deleted ' + u.email + '.');
+      await load();
+    } catch (err) { setMsg('Delete failed: ' + err.message); }
+  }
+
+  const roleLabel = (r) => (r === 'user' || r === 'member' || r === 'sales' ? 'sales' : r);
+
   if (!users || users.length === 0) {
     return (
       <>
@@ -62,8 +75,8 @@ export default function Admin() {
                 <span className={`pill ${u.status === 'active' ? 'active' : u.status === 'pending' ? 'prospect' : 'tracking'}`}>{u.status}</span>
               </td>
               <td data-label="Role">
-                <select value={u.role} disabled={u.id === meId} onChange={(e) => updateUser(u.id, { role: e.target.value })}>
-                  <option value="member">member</option>
+                <select value={roleLabel(u.role)} disabled={u.id === meId} onChange={(e) => updateUser(u.id, { role: e.target.value })}>
+                  <option value="sales">sales</option>
                   <option value="admin">admin</option>
                 </select>
               </td>
@@ -78,6 +91,7 @@ export default function Admin() {
                     {u.status === 'pending' && <button className="ghost small primary" style={{ color: 'var(--green)' }} onClick={() => updateUser(u.id, { status: 'active' })}>Approve</button>}
                     {u.status === 'active' && <button className="ghost small" onClick={() => updateUser(u.id, { status: 'suspended' })}>Suspend</button>}
                     {u.status === 'suspended' && <button className="ghost small" style={{ color: 'var(--green)' }} onClick={() => updateUser(u.id, { status: 'active' })}>Reactivate</button>}
+                    <button className="ghost small" style={{ color: 'var(--red)' }} onClick={() => removeUser(u)}>Delete</button>
                   </span>
                 )}
               </td>

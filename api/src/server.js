@@ -142,6 +142,33 @@ app.put('/api/admin/users/:id', async (req, res) => {
   return json(res, { ok: true });
 });
 
+app.delete('/api/admin/users/:id', async (req, res) => {
+  const user = await currentUser(req);
+  if (!user) return json(res, { error: 'unauthorized' }, 401);
+  if (user.role !== 'admin') return json(res, { error: 'forbidden' }, 403);
+  const id = req.params.id;
+  if (id === user.id) return json(res, { error: 'You cannot delete your own account.' }, 400);
+  const target = (await sql`SELECT * FROM users WHERE id = ${id}`)[0];
+  if (!target) return json(res, { error: 'not found' }, 404);
+  const admins = await sql`SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND status = 'active'`;
+  if (target.role === 'admin' && Number(admins[0].n) <= 1) {
+    return json(res, { error: 'This is the last active admin — promote someone else first.' }, 400);
+  }
+  try {
+    await sql.begin(async (tx) => {
+      await tx`DELETE FROM sessions WHERE user_id = ${id}`;
+      await tx`DELETE FROM portal_sessions WHERE user_id IN (SELECT id FROM portal_users WHERE owner_user_id = ${id})`;
+      await tx`UPDATE bookings SET ambassador_user_id = NULL WHERE ambassador_user_id IN (SELECT id FROM portal_users WHERE owner_user_id = ${id})`;
+      await tx`DELETE FROM portal_users WHERE owner_user_id = ${id}`;
+      await tx`DELETE FROM portal_invites WHERE owner_user_id = ${id}`;
+      await tx`DELETE FROM users WHERE id = ${id}`;
+    });
+    return json(res, { ok: true });
+  } catch (e) {
+    return json(res, { error: 'Delete failed: ' + e.message }, 500);
+  }
+});
+
 /* ================= active gate ================= */
 // Mounted on every data route below: requires a signed-in, active user.
 function gate(handler) {
@@ -404,6 +431,20 @@ app.delete('/api/event-types/:id', gate(async (req, res, user) => {
 }));
 
 /* portal users + invites */
+const PORTAL_ROLES = ['store_manager', 'store_staff', 'brand_ambassador'];
+
+function inviteRole(role) {
+  return PORTAL_ROLES.includes(role) ? role : 'store_manager';
+}
+function invitePathFor(role) {
+  return role === 'brand_ambassador' ? '/staff/invite/' : '/store/invite/';
+}
+function inviteLink(token, role) {
+  const base = (process.env.PORTAL_URL || '').trim().replace(/\/+$/, '');
+  if (!base) return null;
+  return base + invitePathFor(role) + token;
+}
+
 app.get('/api/portal-users', gate(async (req, res, user) => {
   const rows = await sql`
     SELECT pu.*, a.name AS account_name, a.license_number AS account_license
@@ -423,23 +464,66 @@ app.put('/api/portal-users/:id/status', gate(async (req, res, user) => {
 
 app.post('/api/portal-invites', gate(async (req, res, user) => {
   const { email, role, accountId } = req.body || {};
+  const r = inviteRole(role);
   if (!email || !String(email).includes('@')) return json(res, { error: 'A valid email is required.' }, 400);
   const e = String(email).toLowerCase();
   const clash = await sql`SELECT id FROM portal_users WHERE email = ${e}`;
   if (clash.length) return json(res, { error: 'That email is already a portal user.' }, 409);
-  const account = (role || 'client') === 'client'
-    ? (await sql`SELECT * FROM accounts WHERE id = ${accountId} AND user_id = ${user.id}`)[0]
-    : null;
-  if ((role || 'client') === 'client' && !account) return json(res, { error: 'Pick a client account to link.' }, 400);
+  let account = null;
+  if (r !== 'brand_ambassador' && accountId) {
+    account = (await sql`SELECT * FROM accounts WHERE id = ${accountId} AND user_id = ${user.id}`)[0];
+    if (!account) return json(res, { error: 'Pick a valid client account to link.' }, 400);
+  }
   const token = crypto.randomBytes(24).toString('hex');
   const id = 'inv' + Date.now();
+  const expires = new Date(Date.now() + 7 * 864e5).toISOString();
   await sql`INSERT INTO portal_invites (id, email, role, account_id, owner_user_id, token, expires, created_at)
-    VALUES (${id}, ${e}, ${role || 'client'}, ${account ? account.id : null}, ${user.id}, ${token}, ${new Date(Date.now() + 7 * 864e5).toISOString()}, ${new Date().toISOString()})`;
+    VALUES (${id}, ${e}, ${r}, ${account ? account.id : null}, ${user.id}, ${token}, ${expires}, ${new Date().toISOString()})`;
   return json(res, {
-    id, email: e, role: role || 'client', accountId: account ? account.id : null,
-    token, expires: new Date(Date.now() + 7 * 864e5).toISOString(),
-    link: (process.env.PORTAL_URL || '') + '/invite/' + token,
+    id, email: e, role: r, accountId: account ? account.id : null,
+    token, expires, link: inviteLink(token, r), needsPortalUrl: !inviteLink(token, r),
   });
+}));
+
+app.get('/api/portal-invites', gate(async (req, res, user) => {
+  const rows = await sql`SELECT * FROM portal_invites WHERE owner_user_id = ${user.id} ORDER BY created_at DESC`;
+  return json(res, rows.map((inv) => {
+    const expired = inv.expires && new Date(inv.expires).getTime() < Date.now();
+    const status = inv.used_at ? 'used' : (expired ? 'expired' : 'pending');
+    return {
+      id: inv.id, email: inv.email, role: inv.role, accountId: inv.account_id,
+      token: inv.token, expires: inv.expires, usedAt: inv.used_at, createdAt: inv.created_at,
+      status, link: inviteLink(inv.token, inv.role),
+    };
+  }));
+}));
+
+app.delete('/api/portal-invites/:id', gate(async (req, res, user) => {
+  await sql`DELETE FROM portal_invites WHERE id = ${req.params.id} AND owner_user_id = ${user.id} AND used_at IS NULL`;
+  return json(res, { ok: true });
+}));
+
+app.delete('/api/portal-users/:id', gate(async (req, res, user) => {
+  try {
+    await sql.begin(async (tx) => {
+      await tx`DELETE FROM portal_sessions WHERE user_id = ${req.params.id}`;
+      await tx`UPDATE bookings SET ambassador_user_id = NULL WHERE ambassador_user_id = ${req.params.id}`;
+      await tx`DELETE FROM portal_users WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+    });
+    return json(res, { ok: true });
+  } catch (e) {
+    return json(res, { error: 'Delete failed: ' + e.message }, 500);
+  }
+}));
+
+app.put('/api/portal-users/:id/account', gate(async (req, res, user) => {
+  const accountId = (req.body || {}).accountId || null;
+  if (accountId) {
+    const acc = (await sql`SELECT id FROM accounts WHERE id = ${accountId} AND user_id = ${user.id}`)[0];
+    if (!acc) return json(res, { error: 'That account does not belong to you.' }, 400);
+  }
+  await sql`UPDATE portal_users SET account_id = ${accountId} WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+  return json(res, { ok: true });
 }));
 
 /* bookings */
@@ -467,11 +551,24 @@ app.get('/api/bookings', gate(async (req, res, user) => {
   return json(res, out);
 }));
 
+app.put('/api/bookings/:id/assign', gate(async (req, res, user) => {
+  const ambassadorUserId = (req.body || {}).ambassadorUserId || null;
+  if (ambassadorUserId) {
+    const amb = (await sql`SELECT id FROM portal_users WHERE id = ${ambassadorUserId} AND owner_user_id = ${user.id} AND role = 'brand_ambassador' AND status = 'active'`)[0];
+    if (!amb) return json(res, { error: 'Pick a valid staff member.' }, 400);
+  }
+  const row = (await sql`SELECT * FROM bookings WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`)[0];
+  if (!row) return json(res, { error: 'not found' }, 404);
+  if (row.status !== 'approved' && row.status !== 'confirmed') return json(res, { error: 'Only approved or confirmed bookings can be reassigned.' }, 400);
+  await sql`UPDATE bookings SET ambassador_user_id = ${ambassadorUserId}, status = 'approved', updated_at = ${new Date().toISOString()} WHERE id = ${row.id}`;
+  return json(res, { ok: true });
+}));
+
 app.put('/api/bookings/:id/approve', gate(async (req, res, user) => {
   const b = req.body || {};
   const ambassadorUserId = b.ambassadorUserId || null;
   if (ambassadorUserId) {
-    const amb = (await sql`SELECT id FROM portal_users WHERE id = ${ambassadorUserId} AND owner_user_id = ${user.id} AND role = 'staff' AND status = 'active'`)[0];
+    const amb = (await sql`SELECT id FROM portal_users WHERE id = ${ambassadorUserId} AND owner_user_id = ${user.id} AND role = 'brand_ambassador' AND status = 'active'`)[0];
     if (!amb) return json(res, { error: 'Pick a valid staff member.' }, 400);
   }
   const row = (await sql`SELECT * FROM bookings WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`)[0];
@@ -514,10 +611,10 @@ app.put('/api/bookings/:id/decline', gate(async (req, res, user) => {
 app.put('/api/bookings/:id/cancel', gate(async (req, res, user) => {
   const row = (await sql`SELECT * FROM bookings WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`)[0];
   if (!row) return json(res, { error: 'not found' }, 404);
-  if (row.status !== 'approved' && row.status !== 'requested') return json(res, { error: 'This booking cannot be cancelled now.' }, 400);
+  if (row.status !== 'approved' && row.status !== 'confirmed' && row.status !== 'requested') return json(res, { error: 'This booking cannot be cancelled now.' }, 400);
   await sql.begin(async (tx) => {
     await tx`UPDATE bookings SET status = 'cancelled', updated_at = ${new Date().toISOString()} WHERE id = ${row.id}`;
-    if (row.status === 'approved' && Number(row.credits_charged) > 0) {
+    if ((row.status === 'approved' || row.status === 'confirmed') && Number(row.credits_charged) > 0) {
       await tx`INSERT INTO credits (id, user_id, account_id, account_name, license_number, city, amount, note, date)
         VALUES (${'cr' + Date.now() + Math.random().toString(36).slice(2, 6)}, ${user.id}, ${row.account_id},
           ${row.account_name}, ${row.license_number || ''}, '', ${Number(row.credits_charged)},

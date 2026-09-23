@@ -49,6 +49,7 @@ export const useStore = create((set, get) => ({
   bookings: [],
   eventTypes: [],
   portalUsers: [],
+  portalInvites: [],
   reportPeriod: 'week',
   reportRef: null,
   lastCreditDraft: '',
@@ -77,7 +78,7 @@ export const useStore = create((set, get) => ({
     }
     try {
       const normDate = (rows) => (rows || []).map((r) => ({ ...r, date: r.date || '' }));
-      const [settings, accounts, expenses, ocmSeen, weekPlan, routeLog, credits, messages, bookings, eventTypes, portalUsers] = await Promise.all([
+      const [settings, accounts, expenses, ocmSeen, weekPlan, routeLog, credits, messages, bookings, eventTypes, portalUsers, portalInvites] = await Promise.all([
         api.get('/api/settings'),
         api.get('/api/accounts'),
         api.get('/api/expenses'),
@@ -89,6 +90,7 @@ export const useStore = create((set, get) => ({
         api.get('/api/bookings'),
         api.get('/api/event-types'),
         api.get('/api/portal-users'),
+        api.get('/api/portal-invites'),
       ]);
       set({
         settings: { ...DEFAULT_SETTINGS, ...settings, gmapsKey: validGmapsKey(settings && settings.gmapsKey) },
@@ -102,6 +104,7 @@ export const useStore = create((set, get) => ({
         bookings: bookings || [],
         eventTypes: eventTypes || [],
         portalUsers: portalUsers || [],
+        portalInvites: portalInvites || [],
         auth: 'app',
       });
     } catch (e) {

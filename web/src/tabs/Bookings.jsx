@@ -4,33 +4,37 @@ import { api } from '../api';
 import { creditEstimate, todayStr } from '../utils';
 import { Section, Stat, Empty } from '../components';
 
-const STATUS_PILL = { requested: 'tracking', approved: 'active', declined: 'inactive', cancelled: 'prospect', completed: 'activation' };
-const STATUS_LABEL = { requested: 'Requested', approved: 'Approved', declined: 'Declined', cancelled: 'Cancelled', completed: 'Completed' };
+const STATUS_PILL = { requested: 'tracking', approved: 'active', confirmed: 'active', declined: 'inactive', cancelled: 'prospect', completed: 'activation' };
+const STATUS_LABEL = { requested: 'Requested', approved: 'Approved', confirmed: 'Confirmed', declined: 'Declined', cancelled: 'Cancelled', completed: 'Completed' };
+
+const ROLE_LABEL = { store_manager: 'Store manager', store_staff: 'Store staff', brand_ambassador: 'Brand ambassador' };
 
 export default function Bookings() {
   const st = useStore();
   const [approveBk, setApproveBk] = useState(null);
   const [declineBk, setDeclineBk] = useState(null);
-  const [invite, setInvite] = useState({ role: 'client', email: '', accountId: '' });
+  const [invite, setInvite] = useState({ role: 'store_manager', email: '', accountId: '' });
   const [inviteLink, setInviteLink] = useState('');
+  const [inviteError, setInviteError] = useState('');
 
   async function reload() {
     try {
-      const [bookings, credits, eventTypes, portalUsers] = await Promise.all([
-        api.get('/api/bookings'), api.get('/api/credits'), api.get('/api/event-types'), api.get('/api/portal-users'),
+      const [bookings, credits, eventTypes, portalUsers, portalInvites] = await Promise.all([
+        api.get('/api/bookings'), api.get('/api/credits'), api.get('/api/event-types'), api.get('/api/portal-users'), api.get('/api/portal-invites'),
       ]);
-      st.set({ bookings, credits, eventTypes, portalUsers });
+      st.set({ bookings, credits, eventTypes, portalUsers, portalInvites });
     } catch (e) { st.showToast('Reload failed: ' + e.message); }
   }
 
   const today = todayStr();
   const plus14 = (() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().slice(0, 10); })();
   const rows = [...st.bookings].sort((a, b) => (a.date + (a.startTime || '')).localeCompare(b.date + (b.startTime || '')));
-  const norm = rows.map((b) => (b.status === 'approved' && b.date < today ? { ...b, status: 'completed' } : b));
+  const norm = rows.map((b) => ((b.status === 'approved' || b.status === 'confirmed') && b.date < today ? { ...b, status: 'completed' } : b));
   const requests = norm.filter((b) => b.status === 'requested');
-  const upcoming = norm.filter((b) => (b.status === 'approved') && b.date >= today && b.date <= plus14);
+  const upcoming = norm.filter((b) => (b.status === 'approved' || b.status === 'confirmed') && b.date >= today && b.date <= plus14);
   const archive = norm.filter((b) => ['declined', 'cancelled', 'completed'].includes(b.status));
-  const staff = st.portalUsers.filter((u) => u.role === 'staff');
+  const ambassadors = st.portalUsers.filter((u) => u.role === 'brand_ambassador');
+  const storeUsers = st.portalUsers.filter((u) => u.role !== 'brand_ambassador');
 
   const typeById = (id) => st.eventTypes.find((t) => t.id === id) || null;
 
@@ -63,14 +67,26 @@ export default function Bookings() {
 
   async function createInvite() {
     if (!invite.email || !invite.email.includes('@')) { st.showToast('Enter a valid email.'); return; }
-    if (invite.role === 'client' && !invite.accountId) { st.showToast('Pick the client account to link.'); return; }
+    setInviteError('');
     try {
       const r = await api.post('/api/portal-invites', invite);
-      setInviteLink(r.link);
+      setInviteLink(r.link || '');
+      if (r.needsPortalUrl) setInviteError('PORTAL_URL is not set on the console, so no link was generated — copy the token below and open https://<portal>/store/invite/<token> (or /staff/invite/…).');
       st.showToast('Invite created — share the link to activate the account.');
-      setInvite({ role: 'client', email: '', accountId: '' });
+      setInvite({ role: 'store_manager', email: '', accountId: '' });
       await reload();
     } catch (e) { st.showToast('Invite failed: ' + e.message); }
+  }
+
+  async function assignAmbassador(bk, ambassadorUserId) {
+    try { await api.put('/api/bookings/' + bk.id + '/assign', { ambassadorUserId: ambassadorUserId || null }); await reload(); }
+    catch (e) { st.showToast('Reassign failed: ' + e.message); }
+  }
+
+  async function deleteInvite(inv) {
+    if (!confirm('Delete the un-used invite for ' + inv.email + '?')) return;
+    try { await api.del('/api/portal-invites/' + inv.id); await reload(); }
+    catch (e) { st.showToast('Delete failed: ' + e.message); }
   }
 
   async function toggleUser(u) {
@@ -78,7 +94,18 @@ export default function Bookings() {
     await reload();
   }
 
-  const pm = (id, n, i) => id === n || id === i;
+  async function deleteUser(u) {
+    if (!confirm(`Permanently delete portal user ${u.email || u.name}? Their sessions end and they are removed from bookings.`)) return;
+    try { await api.del('/api/portal-users/' + u.id); st.showToast('Portal user deleted.'); await reload(); }
+    catch (e) { st.showToast('Delete failed: ' + e.message); }
+  }
+
+  async function assignAccount(u, accountId) {
+    try { await api.put('/api/portal-users/' + u.id + '/account', { accountId: accountId || null }); await reload(); }
+    catch (e) { st.showToast('Update failed: ' + e.message); }
+  }
+
+  const pm = (u) => u.role !== 'brand_ambassador';
 
   return (
     <>
@@ -89,9 +116,14 @@ export default function Bookings() {
       <div className="cards4">
         <Stat num={requests.length} lbl="Awaiting review" />
         <Stat num={upcoming.length} lbl="Upcoming 14 days" />
-        <Stat num={staff.length} lbl="Staff on portal" />
-        <Stat num={st.portalUsers.filter((u) => u.role === 'client' && u.status === 'active').length} lbl="Active client users" />
+        <Stat num={ambassadors.filter((u) => u.status === 'active').length} lbl="Active ambassadors" />
+        <Stat num={storeUsers.filter((u) => u.status === 'active').length} lbl="Active store users" />
       </div>
+      {inviteError && (
+        <div className="card" style={{ background: 'var(--amber-soft)', marginBottom: 14 }}>
+          <b>Invite link not generated:</b> {inviteError}
+        </div>
+      )}
 
       {requests.length > 0 && (
         <>
@@ -124,12 +156,17 @@ export default function Bookings() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div>
                   <b>{b.eventTypeName}</b> <span className="muted">· {b.accountName}</span>
-                  {b.ambassadorName ? <span className="pill active" style={{ marginLeft: 8 }}>{b.ambassadorName}</span> : null}
+                  {b.ambassadorName ? <span className="pill active" style={{ marginLeft: 8 }}>{b.ambassadorName}</span> : <span className="pill tracking" style={{ marginLeft: 8 }}>unassigned</span>}
+                  {b.status === 'confirmed' ? <span className={`pill ${STATUS_PILL.confirmed}`} style={{ marginLeft: 8 }}>Confirmed</span> : null}
                   <div className="muted" style={{ marginTop: 2 }}>
                     {b.date}{b.startTime ? ` @ ${b.startTime}` : ''} · {Number(b.durationHours) || 0}h · {b.creditsCharged != null ? `${b.creditsCharged} cr charged` : ''}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select aria-label="Assign ambassador" value={b.ambassadorUserId || ''} onChange={(e) => assignAmbassador(b, e.target.value)} style={{ width: 'auto', padding: '6px 8px', fontSize: 12.5 }}>
+                    <option value="">Assign ambassador…</option>
+                    {ambassadors.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
                   <button className="ghost small" onClick={() => doCancel(b)}>Cancel & refund</button>
                 </div>
               </div>
@@ -147,15 +184,19 @@ export default function Bookings() {
         </tbody>
       </table>
 
-      <Section>Portal invites & staff</Section>
+      <Section>Portal invites</Section>
       <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, marginBottom: 8 }}>Invite someone to the store portal</div>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Invite someone to the portal</div>
+        <div className="muted" style={{ marginBottom: 12 }}>
+          Brand ambassadors get the <b>ambassador portal</b> (their events, schedule). Store managers and staff get the <b>store portal</b> — store staff pick their store when they claim the invite.
+        </div>
         <div className="grid2">
           <div>
             <label>Role</label>
             <select value={invite.role} onChange={(e) => setInvite({ ...invite, role: e.target.value, accountId: '' })}>
-              <option value="client">Client (store staff)</option>
-              <option value="staff">Staff (ambassador / trainer)</option>
+              <option value="brand_ambassador">Brand ambassador</option>
+              <option value="store_manager">Store manager</option>
+              <option value="store_staff">Store staff</option>
             </select>
           </div>
           <div>
@@ -163,11 +204,11 @@ export default function Bookings() {
             <input value={invite.email} placeholder="name@store.com" onChange={(e) => setInvite({ ...invite, email: e.target.value })} />
           </div>
         </div>
-        {invite.role === 'client' && (
+        {invite.role !== 'brand_ambassador' && (
           <div>
-            <label>Linked client account</label>
+            <label>Linked store account <span className="muted">(optional — they can pick it themselves at claim)</span></label>
             <select value={invite.accountId} onChange={(e) => setInvite({ ...invite, accountId: e.target.value })}>
-              <option value="">— select —</option>
+              <option value="">— let them choose —</option>
               {st.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.city ? ` (${a.city})` : ''}</option>)}
             </select>
           </div>
@@ -182,18 +223,54 @@ export default function Bookings() {
         )}
       </div>
 
-      {st.portalUsers.length === 0 ? <Empty>No portal users yet. Create invites above for your stores and ambassadors.</Empty> : (
+      <div className="muted" style={{ marginBottom: 10 }}>Outstanding invites — links expire in 7 days or once used.</div>
+      {st.portalInvites.length === 0 ? (
+        <Empty>No invites created yet.</Empty>
+      ) : (
         <table>
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Linked to</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            {st.portalInvites.map((inv) => (
+              <tr key={inv.id}>
+                <td data-label="Email"><b>{inv.email}</b></td>
+                <td data-label="Role"><span className="pill">{ROLE_LABEL[inv.role] || inv.role}</span></td>
+                <td data-label="Status"><span className={`pill ${inv.status === 'pending' ? 'tracking' : inv.status === 'used' ? 'active' : 'inactive'}`}>{inv.status}</span></td>
+                <td data-label="Created">{(inv.createdAt || '').slice(0, 10)}</td>
+                <td data-label="">{inv.status === 'pending' &&
+                  <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="ghost small" style={{ color: 'var(--red)' }} onClick={() => deleteInvite(inv)}>Delete</button>
+                  </span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <Section>Portal users</Section>
+      {st.portalUsers.length === 0 ? <Empty>No portal users yet. Create invites above.</Empty> : (
+        <table>
+          <thead><tr><th>Name</th><th>Role</th><th>Linked store</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             {st.portalUsers.map((u) => (
               <tr key={u.id}>
-                <td data-label="Name"><b>{u.name || '—'}</b></td>
-                <td data-label="Email">{u.email}</td>
-                <td data-label="Role"><span className="pill">{u.role}</span></td>
-                <td data-label="Linked to">{pm(u.role, 'client') ? (u.accountName || '—') : '—'}</td>
+                <td data-label="Name"><b>{u.name || '—'}</b><div className="muted">{u.email}</div></td>
+                <td data-label="Role"><span className="pill">{ROLE_LABEL[u.role] || u.role}</span></td>
+                <td data-label="Linked store">
+                  {pm(u) ? (
+                    <select value={u.accountId || ''} onChange={(e) => assignAccount(u, e.target.value)}>
+                      <option value="">— unlinked —</option>
+                      {st.accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  ) : <span className="muted">—</span>}
+                </td>
                 <td data-label="Status"><span className={`pill ${u.status === 'active' ? 'active' : 'inactive'}`}>{u.status}</span></td>
-                <td data-label=""><button className="ghost small" style={{ color: u.status === 'active' ? 'var(--red)' : 'var(--green)' }} onClick={() => toggleUser(u)}>{u.status === 'active' ? 'Suspend' : 'Reactivate'}</button></td>
+                <td data-label="Actions">
+                  <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="ghost small" style={{ color: u.status === 'active' ? 'var(--red)' : 'var(--green)' }} onClick={() => toggleUser(u)}>{u.status === 'active' ? 'Suspend' : 'Reactivate'}</button>
+                    <button className="ghost small" style={{ color: 'var(--red)' }} onClick={() => deleteUser(u)}>Delete</button>
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -213,7 +290,7 @@ export default function Bookings() {
         </>
       )}
 
-      {approveBk && <ApproveModal bk={approveBk} setBk={setApproveBk} onApprove={doApprove} staff={staff} type={typeById(approveBk.eventTypeId)} />}
+      {approveBk && <ApproveModal bk={approveBk} setBk={setApproveBk} onApprove={doApprove} ambassadors={ambassadors} type={typeById(approveBk.eventTypeId)} />}
       {declineBk && <DeclineModal bk={declineBk} setBk={setDeclineBk} onDecline={doDecline} />}
     </>
   );
@@ -249,7 +326,7 @@ function PricingRow({ et, onSaved, onToast }) {
   );
 }
 
-function ApproveModal({ bk, setBk, onApprove, staff, type }) {
+function ApproveModal({ bk, setBk, onApprove, ambassadors, type }) {
   const [amb, setAmb] = useState('');
   const [notes, setNotes] = useState('');
   const cost = creditEstimate(type, bk.durationHours);
@@ -263,10 +340,10 @@ function ApproveModal({ bk, setBk, onApprove, staff, type }) {
         <div className="card" style={{ background: 'var(--panel2)', marginBottom: 10 }}>
           This will charge the client <b className="disp" style={{ color: 'var(--amber)' }}>{cost} credits</b> and staff the event.
         </div>
-        <label>Assign ambassador / trainer</label>
+        <label>Assign ambassador</label>
         <select value={amb} onChange={(e) => setAmb(e.target.value)}>
           <option value="">— unassigned (assign later) —</option>
-          {staff.map((u) => <option key={u.id} value={u.id}>{u.name}{u.email ? ` (${u.email})` : ''}</option>)}
+          {ambassadors.map((u) => <option key={u.id} value={u.id}>{u.name}{u.email ? ` (${u.email})` : ''}</option>)}
         </select>
         <label>Note (seen by staff / client)</label>
         <input value={notes} placeholder="e.g. bring sampler kit" onChange={(e) => setNotes(e.target.value)} />

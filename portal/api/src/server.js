@@ -81,7 +81,7 @@ async function gate(req, res, next) {
     if (!rows.length) return fail(res, 401, 'session invalid');
     const u = rows[0];
     req.user = u;
-    if (u.role === 'client') {
+    if (u.role !== 'brand_ambassador') {
       const acc = await sql`SELECT name, city, address FROM accounts WHERE id = ${u.account_id}`.catch(() => []);
       const a = acc[0] || {};
       req.user.accountName = a.name || null;
@@ -105,7 +105,7 @@ async function createSession(res, user) {
 // ---------------------------------------------------------------- auth routes
 
 app.post('/api/auth/invite-signup', async (req, res) => {
-  const { token, name, password } = req.body || {};
+  const { token, name, password, accountId } = req.body || {};
   if (!token || !name || !password || password.length < 6) return fail(res, 400, 'name, password (6+ chars) and invite token required');
   try {
     const inv = await sql`SELECT * FROM portal_invites WHERE token = ${token}`.catch(() => []);
@@ -113,16 +113,40 @@ app.post('/api/auth/invite-signup', async (req, res) => {
     const it = inv[0];
     if (it.used_at) return fail(res, 400, 'invite already used');
     if (new Date(it.expires).getTime() < Date.now()) return fail(res, 400, 'invite expired');
+    let claimAccountId = it.account_id || null;
+    if (it.role !== 'brand_ambassador') {
+      if (accountId) claimAccountId = accountId;
+      if (!claimAccountId) return fail(res, 400, 'pick which store you belong to first');
+      const acc = await sql`SELECT id FROM accounts WHERE id = ${claimAccountId} AND user_id = ${it.owner_user_id}`.catch(() => []);
+      if (!acc.length) return fail(res, 400, 'that store is not available');
+    } else {
+      claimAccountId = null;
+    }
     const uid = randomToken();
     const created = await sql`
       INSERT INTO portal_users (id, name, email, role, account_id, owner_user_id, pass_hash, status)
-      VALUES (${uid}, ${name.trim()}, ${it.email}, ${it.role}, ${it.account_id || null}, ${it.owner_user_id}, ${hashPassword(password)}, 'active')
+      VALUES (${uid}, ${name.trim()}, ${it.email}, ${it.role}, ${claimAccountId}, ${it.owner_user_id}, ${hashPassword(password)}, 'active')
       RETURNING id, name, email, role, account_id, owner_user_id`;
     await sql`UPDATE portal_invites SET used_at = now() WHERE token = ${token}`;
     await createSession(res, created[0]);
   } catch (e) {
     fail(res, 409, 'could not activate invite');
   }
+});
+
+// Pre-claim store picker: accounts belong to the invite's owner.
+app.get('/api/portal/available-accounts', async (req, res) => {
+  const token = String(req.query.token || '');
+  if (!token) return fail(res, 400, 'missing token');
+  const inv = await sql`SELECT * FROM portal_invites WHERE token = ${token} AND used_at IS NULL`.catch(() => []);
+  if (!inv.length || new Date(inv[0].expires).getTime() < Date.now()) return fail(res, 404, 'invite invalid or expired');
+  if (inv[0].role === 'brand_ambassador') return ok(res, []);
+  const rows = await sql`
+    SELECT id, name, city, license_number AS "licenseNumber"
+      FROM accounts
+     WHERE user_id = ${inv[0].owner_user_id}
+     ORDER BY name`;
+  ok(res, rows.map((a) => ({ id: a.id, name: a.name, city: a.city || '', licenseNumber: a.licenseNumber || '' })));
 });
 
 app.post('/api/auth/login', async (req, res) => {
@@ -175,7 +199,7 @@ function creditEstimate(et, hours) {
 }
 
 app.get('/api/balance', gate, async (req, res) => {
-  if (req.user.role !== 'client') return ok(res, { balance: null });
+  if (req.user.role === 'brand_ambassador') return ok(res, { balance: null });
   const { account_id, owner_user_id } = req.user;
   const rows = await sql`SELECT COALESCE(SUM(amount), 0)::float AS bal FROM credits WHERE account_id = ${account_id} AND user_id = ${owner_user_id}`;
   ok(res, { balance: Math.round((rows[0].bal || 0) * 100) / 100 });
@@ -183,7 +207,8 @@ app.get('/api/balance', gate, async (req, res) => {
 
 app.get('/api/bookings', gate, async (req, res) => {
   const u = req.user;
-  const rows = await (u.role === 'client'
+  const isStore = u.role !== 'brand_ambassador';
+  const rows = await (isStore
     ? sql`
         SELECT b.id, b.event_type_id AS "eventTypeId", b.event_type_name AS "eventTypeName",
                b.date, b.start_time AS "startTime", b.duration_hours AS "durationHours",
@@ -199,7 +224,7 @@ app.get('/api/bookings', gate, async (req, res) => {
                b.date, b.start_time AS "startTime", b.duration_hours AS "durationHours",
                b.notes_client AS "notesClient", b.notes_admin AS "notesAdmin",
                b.status, b.credits_charged AS "creditsCharged",
-               a.name AS "accountName", a.city AS "accountCity", a.address AS "accountAddress"
+               a.name AS "accountName", a.city AS "accountCity", a.address AS "accountAddress", a.license_number AS "licenseNumber"
           FROM bookings b
           LEFT JOIN accounts a ON a.id = b.account_id
          WHERE b.ambassador_user_id = ${u.id}
@@ -209,7 +234,8 @@ app.get('/api/bookings', gate, async (req, res) => {
 
 app.post('/api/bookings', gate, async (req, res) => {
   const u = req.user;
-  if (u.role !== 'client') return fail(res, 403, 'clients only');
+  if (u.role !== 'store_manager') return fail(res, 403, 'store managers only');
+  if (!u.account_id) return fail(res, 400, 'no store linked to your account');
   const { eventTypeId, date, startTime, durationHours, notes } = req.body || {};
   if (!eventTypeId || !date) return fail(res, 400, 'event type and date required');
   if (new Date(date).toString() === 'Invalid Date') return fail(res, 400, 'invalid date');
@@ -263,7 +289,7 @@ app.post('/api/bookings', gate, async (req, res) => {
 
 app.put('/api/bookings/:id/cancel', gate, async (req, res) => {
   const u = req.user;
-  if (u.role !== 'client') return fail(res, 403, 'clients only');
+  if (u.role === 'brand_ambassador') return fail(res, 403, 'store users only');
   try {
     const updated = await sql`
       UPDATE bookings SET status = 'cancelled'
@@ -273,6 +299,56 @@ app.put('/api/bookings/:id/cancel', gate, async (req, res) => {
     ok(res, updated[0]);
   } catch (e) {
     fail(res, 500, 'could not cancel booking');
+  }
+});
+
+/* ---- ambassador actions ---- */
+
+app.put('/api/bookings/:id/accept', gate, async (req, res) => {
+  const u = req.user;
+  if (u.role !== 'brand_ambassador') return fail(res, 403, 'ambassadors only');
+  try {
+    const updated = await sql`
+      UPDATE bookings SET status = 'confirmed', updated_at = now()
+       WHERE id = ${req.params.id} AND ambassador_user_id = ${u.id} AND status = 'approved'
+       RETURNING id, date`;
+    if (!updated.length) return fail(res, 404, 'you are not assigned to that event, or it is already handled');
+    ok(res, updated[0]);
+  } catch (e) {
+    fail(res, 500, 'accept failed');
+  }
+});
+
+app.put('/api/bookings/:id/decline-assignment', gate, async (req, res) => {
+  const u = req.user;
+  if (u.role !== 'brand_ambassador') return fail(res, 403, 'ambassadors only');
+  try {
+    const updated = await sql`
+      UPDATE bookings
+         SET ambassador_user_id = NULL, status = 'approved',
+             notes_admin = COALESCE(notes_admin, '') || E'\nAmbassador declined — please reassign.',
+             updated_at = now()
+       WHERE id = ${req.params.id} AND ambassador_user_id = ${u.id} AND status = 'approved'
+       RETURNING id`;
+    if (!updated.length) return fail(res, 404, 'you are not assigned to that event, or it is already handled');
+    ok(res, updated[0]);
+  } catch (e) {
+    fail(res, 500, 'decline failed');
+  }
+});
+
+app.put('/api/bookings/:id/complete', gate, async (req, res) => {
+  const u = req.user;
+  if (u.role !== 'brand_ambassador') return fail(res, 403, 'ambassadors only');
+  try {
+    const updated = await sql`
+      UPDATE bookings SET status = 'completed', updated_at = now()
+       WHERE id = ${req.params.id} AND ambassador_user_id = ${u.id} AND status IN ('approved', 'confirmed')
+       RETURNING id, date`;
+    if (!updated.length) return fail(res, 404, 'you are not assigned to that event, or it is already handled');
+    ok(res, updated[0]);
+  } catch (e) {
+    fail(res, 500, 'complete failed');
   }
 });
 
