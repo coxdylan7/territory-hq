@@ -187,7 +187,7 @@ app.get('/api/event-types', gate, async (req, res) => {
   const rows = await sql`
     SELECT id, name, base_hours AS "baseHours", base_price_credits AS "basePriceCredits", extra_hour_credits AS "extraHourCredits", active
       FROM event_types
-     WHERE owner_user_id = ${req.user.owner_user_id} AND active = true
+     WHERE owner_user_id = ${req.user.owner_user_id} AND active = 1
      ORDER BY name`;
   ok(res, rows);
 });
@@ -244,7 +244,7 @@ app.post('/api/bookings', gate, async (req, res) => {
   try {
     const ets = await sql`
       SELECT id, name, base_hours AS "baseHours", base_price_credits AS "basePriceCredits", extra_hour_credits AS "extraHourCredits", active
-        FROM event_types WHERE id = ${eventTypeId} AND owner_user_id = ${u.owner_user_id} AND active = true`;
+        FROM event_types WHERE id = ${eventTypeId} AND owner_user_id = ${u.owner_user_id} AND active = 1`;
     if (!ets.length) return fail(res, 404, 'event type not available');
     const et = ets[0];
     const hours = Number(durationHours) > 0 ? Number(durationHours) : Number(et.baseHours);
