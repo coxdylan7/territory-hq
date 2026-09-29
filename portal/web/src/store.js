@@ -2,6 +2,24 @@ import { create } from 'zustand';
 import { api, getToken, setToken, clearToken } from './api';
 
 let toastTimer = null;
+let poll = null;
+
+function startPolling() {
+  if (poll || typeof window === 'undefined') return;
+  const tick = () => useStore.getState().refresh();
+  const onFocus = () => tick();
+  const onVis = () => { if (!document.hidden) tick(); };
+  window.addEventListener('focus', onFocus);
+  document.addEventListener('visibilitychange', onVis);
+  poll = { iv: setInterval(tick, 45000), onFocus, onVis };
+}
+function stopPolling() {
+  if (!poll) return;
+  clearInterval(poll.iv);
+  window.removeEventListener('focus', poll.onFocus);
+  document.removeEventListener('visibilitychange', poll.onVis);
+  poll = null;
+}
 
 export const useStore = create((set, get) => ({
   auth: getToken() ? 'boot' : 'none',
@@ -25,6 +43,7 @@ export const useStore = create((set, get) => ({
       const me = await api.get('/api/me');
       set({ user: me, auth: 'app' });
       await get().refresh(me);
+      startPolling();
     } catch (e) {
       clearToken();
       set({ auth: 'none', user: null });
@@ -51,6 +70,7 @@ export const useStore = create((set, get) => ({
   },
 
   async logout() {
+    stopPolling();
     try { await api.post('/api/auth/logout', {}); } catch (e) {}
     clearToken();
     set({ auth: 'none', user: null, balance: null, eventTypes: [], bookings: [] });
