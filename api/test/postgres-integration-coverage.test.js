@@ -37,7 +37,7 @@ test('optional Postgres suite covers interval edges, quote reconciliation and re
 });
 
 test('optional Postgres suite covers trigger reruns, rollback retry, invite isolation and audited removal', () => {
-  assert.match(source, /makeEnsureSchema\(sql\)\(\)/);
+  assert.match(source, /makeEnsureSchema\(sql,\s*\{\s*schema\s*\}\)\(\)/);
   assert.match(source, /CREATE TRIGGER[\s\S]*booking_events/);
   assert.match(source, /same key/i);
   assert.match(source, /activatePortalInvite/);

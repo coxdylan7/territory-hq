@@ -20,6 +20,7 @@
     "check:diff": "git diff --check && git diff --cached --check",
     "verify": "npm run test:local && npm run test:postgres && npm run build:all && npm run check:diff",
     "migration:preflight": "node scripts/migration-preflight.js",
-    "migration:verify": "node scripts/post-migration-verify.js"
+    "migration:verify": "node scripts/post-migration-verify.js",
+    "reconcile:legacy-quotes": "node scripts/reconcile-legacy-quotes.js"
   }
 }

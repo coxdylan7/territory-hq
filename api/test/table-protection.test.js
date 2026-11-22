@@ -61,7 +61,7 @@ function assertMissingTablesSkipped(sql, label) {
   const body = loopBody(sql);
   const lower = body.toLowerCase();
 
-  assert.match(body, /if\s+to_regclass\s*\(\s*format\s*\(\s*'public\.%i'\s*,\s*app_table\s*\)\s*\)\s+is\s+null\s+then\s+continue\s*;\s*end\s+if\s*;/i,
+  assert.match(body, /if\s+to_regclass\s*\(\s*format\s*\(\s*'(?:"[^"]+"|public)\.%i'\s*,\s*app_table\s*\)\s*\)\s+is\s+null\s+then\s+continue\s*;\s*end\s+if\s*;/i,
     `${label}: absent tables must be skipped before any DDL or REVOKE`);
 
   const guardEnd = lower.indexOf('end if;');
@@ -73,7 +73,7 @@ function assertMissingTablesSkipped(sql, label) {
   assert.doesNotMatch(body.slice(0, revokeIndex), /revoke all on table/i, `${label}: only one guarded REVOKE`);
   const loopStart = sql.toLowerCase().indexOf('foreach');
   assert.ok(loopStart >= 0, `${label}: expected a FOREACH loop`);
-  assert.doesNotMatch(sql.slice(0, loopStart), /revoke all on table public\.%i/i,
+  assert.doesNotMatch(sql.slice(0, loopStart), /revoke all on table (?:"[^"]+"|public)\.%i/i,
     `${label}: no unconditional table REVOKE outside the loop`);
 }
 
@@ -144,6 +144,34 @@ test('generated protection SQL skips absent tables before RLS or REVOKE', () => 
 test('the security migration skips absent tables before RLS or REVOKE', () => {
   const sql = repoFile('supabase/migrations/20261122002427_secure_public_data_api.sql');
   assertMissingTablesSkipped(sql, 'security migration');
+});
+
+test('runtime protection targets a validated schema instead of hardcoded public', () => {
+  const statements = protectionStatements('ledger_test_isolation');
+  const source = statements.join('\n');
+  assert.match(source, /ledger_test_isolation/, 'protection must target the selected schema');
+  assert.doesNotMatch(source, /\bpublic\./, 'protection must not fall back to public');
+});
+
+test('runtime protection rejects invalid schema names', () => {
+  for (const schema of ['', 'public; drop table users', 'public"."evil', 'public\n--', null]) {
+    assert.throws(() => protectionStatements(schema), /schema/i, `${JSON.stringify(schema)} must be rejected`);
+  }
+});
+
+test('ensureSchema pins the selected schema and defaults production explicitly to public', async () => {
+  const selected = transactionalSql();
+  await makeEnsureSchema(selected.sql, { schema: 'ledger_test_isolation' })();
+  const selectedStatements = selected.events.filter(([kind]) => kind === 'ddl').map(([, statement]) => statement);
+  assert.match(selectedStatements[0], /SET LOCAL search_path = "ledger_test_isolation"/);
+  assert.ok(selectedStatements.some((statement) => /ledger_test_isolation/.test(statement) && /ENABLE ROW LEVEL SECURITY/.test(statement)));
+  assert.doesNotMatch(selectedStatements.join('\n'), /\bpublic\./);
+
+  const production = transactionalSql();
+  await makeEnsureSchema(production.sql)();
+  const productionStatements = production.events.filter(([kind]) => kind === 'ddl').map(([, statement]) => statement);
+  assert.match(productionStatements[0], /SET LOCAL search_path = "public"/);
+  assert.ok(productionStatements.some((statement) => /public/.test(statement) && /REVOKE ALL ON TABLE/.test(statement)));
 });
 
 test('ensureSchema creates, migrates and protects tables inside one transaction', async () => {

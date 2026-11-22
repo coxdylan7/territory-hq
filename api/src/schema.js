@@ -1,6 +1,24 @@
 // Postgres DDL for the HQ application tables
 // The two `messages` columns added later in the original are declared up front (fresh DB).
 
+const DEFAULT_SCHEMA = 'public';
+const RESERVED_SCHEMAS = new Set(['pg_catalog', 'information_schema', 'pg_temp', 'pg_toast']);
+
+function validateSchema(schema = DEFAULT_SCHEMA) {
+  if (typeof schema !== 'string'
+      || schema.length === 0
+      || schema.length > 63
+      || !/^[a-z_][a-z0-9_]*$/.test(schema)
+      || RESERVED_SCHEMAS.has(schema)) {
+    throw new Error(`invalid target schema: ${JSON.stringify(schema)}`);
+  }
+  return schema;
+}
+
+function quoteSchema(schema) {
+  return `"${validateSchema(schema)}"`;
+}
+
 const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
@@ -282,20 +300,24 @@ const STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS credits_idempotency_unique
      ON credits (user_id, idempotency_key)
      WHERE idempotency_key IS NOT NULL`,
-  `CREATE OR REPLACE FUNCTION immutable_credits_guard()
-     RETURNS trigger LANGUAGE plpgsql AS $$
+  `CREATE OR REPLACE FUNCTION @schema@.immutable_credits_guard()
+     RETURNS trigger LANGUAGE plpgsql
+     SET search_path = @schema@, pg_temp
+     AS $$
    BEGIN
      RAISE EXCEPTION 'credits is an append-only ledger' USING ERRCODE = '23514';
    END;
    $$`,
-  `DROP TRIGGER IF EXISTS immutable_credits ON credits`,
+  `DROP TRIGGER IF EXISTS immutable_credits ON @schema@.credits`,
   `CREATE TRIGGER immutable_credits
-     BEFORE UPDATE OR DELETE ON credits
-     FOR EACH ROW EXECUTE FUNCTION immutable_credits_guard()`,
-  `CREATE OR REPLACE FUNCTION enforce_booking_refund_guard()
-     RETURNS trigger LANGUAGE plpgsql AS $$
+     BEFORE UPDATE OR DELETE ON @schema@.credits
+     FOR EACH ROW EXECUTE FUNCTION @schema@.immutable_credits_guard()`,
+  `CREATE OR REPLACE FUNCTION @schema@.enforce_booking_refund_guard()
+     RETURNS trigger LANGUAGE plpgsql
+     SET search_path = @schema@, pg_temp
+     AS $$
    DECLARE
-     charge credits%ROWTYPE;
+     charge @schema@.credits%ROWTYPE;
    BEGIN
      IF NEW.entry_type IS DISTINCT FROM 'booking_refund' THEN
        RETURN NEW;
@@ -303,7 +325,7 @@ const STATEMENTS = [
      IF NEW.reverses_credit_id IS NULL OR NEW.booking_id IS NULL THEN
        RAISE EXCEPTION 'booking refund must name its original charge and booking' USING ERRCODE = '23514';
      END IF;
-     SELECT * INTO charge FROM credits WHERE id = NEW.reverses_credit_id FOR SHARE;
+     SELECT * INTO charge FROM @schema@.credits WHERE id = NEW.reverses_credit_id FOR SHARE;
      IF NOT FOUND OR charge.entry_type IS DISTINCT FROM 'booking_charge' THEN
        RAISE EXCEPTION 'booking refund must reverse a booking charge' USING ERRCODE = '23514';
      END IF;
@@ -320,12 +342,18 @@ const STATEMENTS = [
      RETURN NEW;
    END;
    $$`,
-  `DROP TRIGGER IF EXISTS enforce_booking_refund ON credits`,
+  `DROP TRIGGER IF EXISTS enforce_booking_refund ON @schema@.credits`,
   `CREATE TRIGGER enforce_booking_refund
-     BEFORE INSERT OR UPDATE ON credits
-     FOR EACH ROW EXECUTE FUNCTION enforce_booking_refund_guard()`,
-  `CREATE OR REPLACE FUNCTION immutable_booking_quote_guard()
-     RETURNS trigger LANGUAGE plpgsql AS $$
+     BEFORE INSERT OR UPDATE ON @schema@.credits
+     FOR EACH ROW EXECUTE FUNCTION @schema@.enforce_booking_refund_guard()`,
+  `CREATE OR REPLACE FUNCTION @schema@.immutable_booking_quote_guard()
+     RETURNS trigger LANGUAGE plpgsql
+     SET search_path = @schema@, pg_temp
+     AS $$
+   DECLARE
+     charged_total NUMERIC(14,2);
+     expected_total NUMERIC(14,2);
+     extra_hours NUMERIC(8,2);
    BEGIN
      IF NEW.owner_user_id IS DISTINCT FROM OLD.owner_user_id
         OR NEW.account_id IS DISTINCT FROM OLD.account_id
@@ -341,18 +369,56 @@ const STATEMENTS = [
        RAISE EXCEPTION 'booking quote snapshots are immutable' USING ERRCODE = '23514';
      END IF;
 
-     -- Allow one-time legacy quote backfill: all four snapshots start NULL and
-     -- are completed together. Afterwards OLD values are non-NULL, so this
-     -- branch cannot run again and every later quote change is rejected.
+     charged_total := COALESCE(
+       OLD.credits_charged_numeric,
+       round(OLD.credits_charged::numeric, 2)
+     );
+
+     -- Fail-closed legacy reconciliation. A charged booking may receive only
+     -- its existing charged total; its financial components stay NULL. An
+     -- uncharged booking requires a complete, internally consistent operator
+     -- mapping. No path silently derives components from an event type.
      IF OLD.quoted_credits IS NULL
         AND OLD.quote_base_hours IS NULL
         AND OLD.quote_base_credits IS NULL
-        AND OLD.quote_extra_hour_credits IS NULL
-        AND NEW.quoted_credits IS NOT NULL
-        AND NEW.quote_base_hours IS NOT NULL
-        AND NEW.quote_base_credits IS NOT NULL
-        AND NEW.quote_extra_hour_credits IS NOT NULL THEN
-       RETURN NEW;
+        AND OLD.quote_extra_hour_credits IS NULL THEN
+       IF charged_total IS NOT NULL
+          AND charged_total > 0
+          AND NEW.quoted_credits IS NOT NULL
+          AND NEW.quote_base_hours IS NULL
+          AND NEW.quote_base_credits IS NULL
+          AND NEW.quote_extra_hour_credits IS NULL THEN
+         IF NEW.quoted_credits <> charged_total THEN
+           RAISE EXCEPTION 'charged legacy quote total must equal the existing charged amount'
+             USING ERRCODE = '23514';
+         END IF;
+         RETURN NEW;
+       END IF;
+
+       IF (charged_total IS NULL OR charged_total <= 0)
+          AND NEW.quoted_credits IS NOT NULL
+          AND NEW.quote_base_hours IS NOT NULL
+          AND NEW.quote_base_credits IS NOT NULL
+          AND NEW.quote_extra_hour_credits IS NOT NULL THEN
+         extra_hours := GREATEST(
+           COALESCE(OLD.duration_hours_numeric, round(OLD.duration_hours::numeric, 2))
+             - NEW.quote_base_hours,
+           0
+         );
+         expected_total := round(
+           NEW.quote_base_credits + extra_hours * NEW.quote_extra_hour_credits,
+           2
+         );
+         IF NEW.quote_base_hours <= 0
+            OR NEW.quote_base_credits <= 0
+            OR NEW.quote_extra_hour_credits < 0
+            OR expected_total IS NULL
+            OR NEW.quoted_credits <> expected_total THEN
+           RAISE EXCEPTION 'full legacy quote mapping must be explicit and internally consistent'
+             USING ERRCODE = '23514';
+         END IF;
+         RETURN NEW;
+       END IF;
      END IF;
 
      IF NEW.quoted_credits IS DISTINCT FROM OLD.quoted_credits
@@ -364,15 +430,35 @@ const STATEMENTS = [
      RETURN NEW;
    END;
    $$`,
-  `CREATE OR REPLACE FUNCTION fill_legacy_booking_quote(
+  `CREATE OR REPLACE FUNCTION @schema@.fill_legacy_booking_total(
+     p_booking_id TEXT,
+     p_total NUMERIC
+   ) RETURNS boolean LANGUAGE plpgsql
+   SET search_path = @schema@, pg_temp
+   AS $$
+   BEGIN
+     UPDATE @schema@.bookings
+        SET quoted_credits = p_total
+      WHERE id = p_booking_id
+        AND quoted_credits IS NULL
+        AND quote_base_hours IS NULL
+        AND quote_base_credits IS NULL
+        AND quote_extra_hour_credits IS NULL
+        AND COALESCE(credits_charged_numeric, round(credits_charged::numeric, 2)) = p_total;
+     RETURN FOUND;
+   END;
+   $$`,
+  `CREATE OR REPLACE FUNCTION @schema@.fill_legacy_booking_quote(
      p_booking_id TEXT,
      p_quoted_credits NUMERIC,
      p_base_hours NUMERIC,
      p_base_credits NUMERIC,
      p_extra_hour_credits NUMERIC
-   ) RETURNS boolean LANGUAGE plpgsql AS $$
+   ) RETURNS boolean LANGUAGE plpgsql
+   SET search_path = @schema@, pg_temp
+   AS $$
    BEGIN
-     UPDATE bookings
+     UPDATE @schema@.bookings
         SET quoted_credits = p_quoted_credits,
             quote_base_hours = p_base_hours,
             quote_base_credits = p_base_credits,
@@ -381,16 +467,19 @@ const STATEMENTS = [
         AND quoted_credits IS NULL
         AND quote_base_hours IS NULL
         AND quote_base_credits IS NULL
-        AND quote_extra_hour_credits IS NULL;
+        AND quote_extra_hour_credits IS NULL
+        AND COALESCE(credits_charged_numeric, round(credits_charged::numeric, 2)) IS NULL;
      RETURN FOUND;
    END;
    $$`,
-  `DROP TRIGGER IF EXISTS immutable_booking_quote ON bookings`,
+  `DROP TRIGGER IF EXISTS immutable_booking_quote ON @schema@.bookings`,
   `CREATE TRIGGER immutable_booking_quote
-     BEFORE UPDATE ON bookings
-     FOR EACH ROW EXECUTE FUNCTION immutable_booking_quote_guard()`,
-  `CREATE OR REPLACE FUNCTION enforce_booking_transition_guard()
-     RETURNS trigger LANGUAGE plpgsql AS $$
+     BEFORE UPDATE ON @schema@.bookings
+     FOR EACH ROW EXECUTE FUNCTION @schema@.immutable_booking_quote_guard()`,
+  `CREATE OR REPLACE FUNCTION @schema@.enforce_booking_transition_guard()
+     RETURNS trigger LANGUAGE plpgsql
+     SET search_path = @schema@, pg_temp
+     AS $$
    BEGIN
      IF NEW.status IS DISTINCT FROM OLD.status THEN
        IF OLD.status = 'requested'
@@ -409,10 +498,10 @@ const STATEMENTS = [
      RETURN NEW;
    END;
    $$`,
-  `DROP TRIGGER IF EXISTS enforce_booking_transition ON bookings`,
+  `DROP TRIGGER IF EXISTS enforce_booking_transition ON @schema@.bookings`,
   `CREATE TRIGGER enforce_booking_transition
-     BEFORE UPDATE ON bookings
-     FOR EACH ROW EXECUTE FUNCTION enforce_booking_transition_guard()`,
+     BEFORE UPDATE ON @schema@.bookings
+     FOR EACH ROW EXECUTE FUNCTION @schema@.enforce_booking_transition_guard()`,
   // migrate legacy portal roles to the new role set (idempotent)
   `UPDATE portal_users SET role = 'store_manager' WHERE role = 'client'`,
   `UPDATE portal_users SET role = 'brand_ambassador' WHERE role = 'staff'`,
@@ -420,8 +509,13 @@ const STATEMENTS = [
   `UPDATE portal_invites SET role = 'brand_ambassador' WHERE role = 'staff'`,
 ];
 
+function schemaStatements(schema = DEFAULT_SCHEMA) {
+  const target = quoteSchema(schema);
+  return STATEMENTS.map((statement) => statement.split('@schema@').join(target));
+}
+
 // Runtime-created tables must get the same protection as migrated tables. The
-// list is intentionally explicit: never revoke on every public object.
+// list is intentionally explicit: never revoke on every schema object.
 const MANAGED_TABLES = [
   'users', 'sessions', 'accounts', 'expenses', 'settings', 'ocm_seen',
   'kv', 'route_log', 'credits', 'messages', 'portal_users',
@@ -429,7 +523,8 @@ const MANAGED_TABLES = [
   'booking_events', 'api_idempotency',
 ];
 
-function protectionStatements() {
+function protectionStatements(schema = DEFAULT_SCHEMA) {
+  const target = quoteSchema(schema);
   return [`
 DO $$
 DECLARE
@@ -447,30 +542,33 @@ BEGIN
   LOOP
     -- A managed table may be absent (e.g. an old install). REVOKE on a missing
     -- table errors, so skip it entirely rather than relying on IF EXISTS.
-    IF to_regclass(format('public.%I', app_table)) IS NULL THEN
+    IF to_regclass(format('${target}.%I', app_table)) IS NULL THEN
       CONTINUE;
     END IF;
-    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', app_table);
-    EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY', app_table);
+    EXECUTE format('ALTER TABLE ${target}.%I ENABLE ROW LEVEL SECURITY', app_table);
+    EXECUTE format('ALTER TABLE ${target}.%I FORCE ROW LEVEL SECURITY', app_table);
     IF api_roles IS NOT NULL THEN
-      EXECUTE format('REVOKE ALL ON TABLE public.%I FROM %s', app_table, api_roles);
+      EXECUTE format('REVOKE ALL ON TABLE ${target}.%I FROM %s', app_table, api_roles);
     END IF;
   END LOOP;
 END $$;`];
 }
 
-function makeEnsureSchema(sql) {
+function makeEnsureSchema(sql, options = {}) {
+  const schema = validateSchema(options.schema);
   let done = false;
   return async function ensureSchema() {
     if (done) return;
     // One transaction: newly created tables cannot be exposed between DDL and
     // RLS/REVOKE protection. `done` is only set after commit, so a failed boot
-    // can safely retry the whole sequence.
+    // can safely retry the whole sequence. The search path is pinned to the
+    // validated target so unqualified DDL cannot land in another schema.
     await sql.begin(async (tx) => {
-      for (const stmt of STATEMENTS) {
+      await tx.unsafe(`SET LOCAL search_path = ${quoteSchema(schema)}`);
+      for (const stmt of schemaStatements(schema)) {
         await tx.unsafe(stmt);
       }
-      for (const stmt of protectionStatements()) {
+      for (const stmt of protectionStatements(schema)) {
         await tx.unsafe(stmt);
       }
     });
@@ -485,8 +583,11 @@ function ensureSchema() {
 }
 
 module.exports = {
+  DEFAULT_SCHEMA,
   ensureSchema,
   makeEnsureSchema,
   MANAGED_TABLES,
   protectionStatements,
+  schemaStatements,
+  validateSchema,
 };

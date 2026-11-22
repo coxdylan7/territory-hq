@@ -2,8 +2,9 @@
 
 This runbook prepares and applies the staged imperative migrations in
 `supabase/migrations/` without ever pasting credentials into chat, issues, shell
-history, or client-side code. No live service was contacted while preparing the
-repository. Every command below is run by an operator tomorrow, explicitly.
+history, or client-side code. No production data was changed while preparing the
+repository; the read-only discovery and its backup are documented below. Every
+command below is run by an operator tomorrow, explicitly.
 
 ## 0. Safety rules and required environment variables
 
@@ -19,8 +20,13 @@ repository. Every command below is run by an operator tomorrow, explicitly.
   preflighted on a fresh disposable branch/copy, never in place.
 - The verification script accepts production only with
   `--environment production --confirm-environment production`.
-- No script in `scripts/` applies migrations, writes data, or launches the
-  Supabase CLI. They open a `BEGIN READ ONLY` transaction and roll it back.
+- `migration-preflight.js` and `post-migration-verify.js` are read-only: they
+  open a `BEGIN READ ONLY` transaction and roll it back. They never apply a
+  migration or write data.
+- `reconcile-legacy-quotes.js` is the only repository write path. Its `dry-run`
+  mode opens no connection, `review` is read-only, and `apply` requires a saved
+  approved review plus the exact typed confirmation. It never reads a URL from
+  the environment or command-line arguments; review/apply accept stdin only.
 - Keep secrets in your secret manager or shell environment. Use variable names
   in commands, never literal values. Do not read `api/.env` in automation.
 
@@ -78,6 +84,66 @@ This runs all default Node suites, both Vite builds, the optional Postgres
 suite only when `TEST_DATABASE_URL` is present, and diff checks. `npm run
 check:migrations` runs the deterministic migration-order and schema/migration
 parity checks alone. No database is contacted by these commands.
+
+### Verified local rehearsal on 2026-11-22 (this workspace)
+
+Docker commands need the host's Docker group; direct socket access was denied.
+Use `newgrp docker -c '...'` for every Supabase/Docker command. No group
+password, database URL, or other machine-only secret belongs in this runbook.
+
+```sh
+supabase --version
+newgrp docker -c 'supabase status'
+newgrp docker -c 'supabase db reset --local'
+newgrp docker -c 'supabase migration list --local'
+newgrp docker -c 'supabase db lint --local --fail-on error'
+TEST_DATABASE_URL="$DISPOSABLE_TEST_DB_URL" npm run verify
+```
+
+Verified result: Supabase CLI `3.2.0`; a clean local reset applied all four
+migrations in deterministic order; the local migration list aligned with the
+repository; `db lint --local --fail-on error` was clean; and the full
+`npm run verify` exited 0 with 257 executed test cases, 0 failures and 0 skips:
+39 root, 160 API (including 12 real PostgreSQL cases), 15 HQ web, 17 portal
+API, 14 portal web, and a second standalone 12-case PostgreSQL invocation,
+plus both Vite builds and both diff checks. The application's production
+runtime schema remains explicitly `public`.
+Random validated schemas are used only by disposable tests; runtime protection,
+function qualification and `search_path` now follow the selected schema. RLS
+policies and grants were not weakened.
+
+Local replay backups use the pattern `backups/local-rehearsal-<UTC stamp>/`.
+Current Supabase CLI documentation defines
+`functions.<function_name>.import_map` (default
+`supabase/functions/<function_name>/deno.json`), not a top-level `[import_map]`
+section. That obsolete section was removed from `supabase/config.toml` and
+replaced with a pointer to the per-function key.
+
+### Hosted preview limitation observed on 2026-11-22
+
+Creating a hosted preview branch returned **HTTP 402** because the Supabase
+organization is not on the Pro plan. Do not retry that path with the same
+organization. Use a fresh local reset/replay as above, or provision a separate
+staging project, then repeat sections 4-9 against that explicit target.
+
+### Read-only production discovery already completed
+
+A production backup was taken before discovery at
+`backups/production-predeploy-<UTC stamp>/` with schema, data, roles and
+`SHA256SUMS`; verify its checksums before any restore decision. Read-only
+discovery found zero of the four repository migrations applied. It reported six
+legacy bookings and eight credit rows: no null owners, no owner/account
+mismatches, no orphan credits, and no invalid dates, times, statuses or
+durations. All six bookings lack a matching owner-scoped event type. Four
+bookings have a nonzero `credits_charged`; the other two must remain blocked or
+receive an explicit operator mapping. No PII was queried or exposed, and no
+production object or row was changed.
+
+Legacy quote reconciliation is therefore fail-closed: charged bookings may
+receive only their existing charged total with all component columns left
+NULL, and no base-hours, base-credits or extra-rate value may be inferred. The
+two uncharged bookings require explicit, internally consistent operator
+mappings; otherwise they stay blocked and read-only.
 
 ## 4. Supabase CLI linking (explicit ref only)
 
@@ -176,6 +242,58 @@ Do not add `--yes`: CLI v3 prompts before changing a hosted project and defaults
 to No, so the apply step still requires a human confirmation. Advisors and
 lint must be clean (or every finding explicitly accepted in the ticket) before
 the staging sign-off.
+
+### 8a. Fail-closed legacy quote reconciliation
+
+After the staged migration is present on the disposable target, create a
+version-1 plan naming exactly four charged bookings and accounting for both
+uncharged bookings via `mappings` or `blockedBookings`. Use IDs from the
+read-only review artifact, never invented values.
+
+Gate 1 — validate the plan only; no connection is opened:
+
+```sh
+node scripts/reconcile-legacy-quotes.js dry-run \
+  --environment staging \
+  --confirm-environment staging \
+  --project-ref "$STAGING_REF" \
+  --plan "$RECONCILIATION_PLAN"
+```
+
+Gate 2 — read-only review. The script derives charged totals only from each
+booking's existing charged amount and writes a pending review file:
+
+```sh
+printf '%s' "$STAGING_DB_URL" | node scripts/reconcile-legacy-quotes.js review \
+  --environment staging \
+  --confirm-environment staging \
+  --project-ref "$STAGING_REF" \
+  --plan "$RECONCILIATION_PLAN" \
+  --db-url-stdin \
+  --review-out "$REVIEW_FILE"
+```
+
+A named operator records approver, change ticket and timestamp in the review
+file, with `status: "approved"`. Any later edit to the plan, target or reviewed
+rows invalidates its snapshot hash. Gate 3 requires that approval and an exact
+typed confirmation; blocked rows produce no write:
+
+```sh
+printf '%s' "$STAGING_DB_URL" | node scripts/reconcile-legacy-quotes.js apply \
+  --environment staging \
+  --confirm-environment staging \
+  --project-ref "$STAGING_REF" \
+  --plan "$RECONCILIATION_PLAN" \
+  --db-url-stdin \
+  --review-file "$REVIEW_FILE" \
+  --confirm-apply APPLY-LEGACY-QUOTE-RECONCILIATION
+```
+
+Do not pass `--db-url`; it is rejected. The apply transaction uses only the
+allowlisted `fill_legacy_booking_total` and reviewed
+`fill_legacy_booking_quote` helpers, rolls back if any result is false, and
+never fabricates quote components. No production reconciliation was executed
+while preparing this repository.
 
 ## 9. Verification queries (read-only)
 

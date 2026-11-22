@@ -99,9 +99,13 @@ async function withIdempotency(options) {
       );
     }
     if (row.completed_at) {
+      let body = row.response_body || {};
+      if (typeof body === 'string') {
+        try { body = JSON.parse(body); } catch { body = {}; }
+      }
       return {
         status: Number(row.response_status) || 200,
-        body: row.response_body || {},
+        body,
         replayed: true,
       };
     }

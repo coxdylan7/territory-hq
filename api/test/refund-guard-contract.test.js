@@ -6,8 +6,9 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 
 const repoRoot = path.join(__dirname, '..', '..');
+const { schemaStatements } = require(path.join(repoRoot, 'api/src/schema'));
 const sources = {
-  runtime: readFileSync(path.join(repoRoot, 'api/src/schema.js'), 'utf8'),
+  runtime: schemaStatements('public').join('\n'),
   migration: readFileSync(
     path.join(repoRoot, 'supabase/migrations/20261122010000_credit_ledger.sql'),
     'utf8'
@@ -16,9 +17,9 @@ const sources = {
 
 for (const [name, source] of Object.entries(sources)) {
   test(`${name} installs an idempotent booking refund constraint trigger`, () => {
-    assert.match(source, /CREATE OR REPLACE FUNCTION (?:public\.)?enforce_booking_refund_guard\(\)/);
-    assert.match(source, /DROP TRIGGER IF EXISTS enforce_booking_refund ON (?:public\.)?credits/);
-    assert.match(source, /CREATE TRIGGER enforce_booking_refund[\s\S]*?BEFORE INSERT OR UPDATE ON (?:public\.)?credits/);
+    assert.match(source, /CREATE OR REPLACE FUNCTION (?:public|"public")\.enforce_booking_refund_guard\(\)/);
+    assert.match(source, /DROP TRIGGER IF EXISTS enforce_booking_refund ON (?:public|"public")\.credits/);
+    assert.match(source, /CREATE TRIGGER enforce_booking_refund[\s\S]*?BEFORE INSERT OR UPDATE ON (?:public|"public")\.credits/);
   });
 
   test(`${name} validates the referenced charge's owner, account, booking and amount`, () => {

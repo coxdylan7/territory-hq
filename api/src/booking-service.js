@@ -237,7 +237,7 @@ async function createBooking(sql, options) {
                AND account_id = ${options.accountId}
                AND date = ${input.date}
                AND status IN ('requested', 'approved', 'confirmed')
-               AND start_time < (${candidateStart}::time + ${candidateHours} * interval '1 hour')
+               AND start_time::time < (${candidateStart}::time + ${candidateHours} * interval '1 hour')
                AND ${candidateStart}::time < (start_time::time + COALESCE(duration_hours_numeric, duration_hours::numeric) * interval '1 hour')
              LIMIT 1`;
           if (overlap.length) {
@@ -341,7 +341,7 @@ async function ensureAmbassadorOverlap(sql, ownerUserId, booking, ambassadorUser
        AND date = ${booking.date}
        AND id <> ${booking.id}
        AND status IN ('approved', 'confirmed')
-       AND start_time < (${candidateStart}::time + ${candidateHours} * interval '1 hour')
+       AND start_time::time < (${candidateStart}::time + ${candidateHours} * interval '1 hour')
        AND ${candidateStart}::time < (start_time::time + COALESCE(duration_hours_numeric, duration_hours::numeric) * interval '1 hour')
      LIMIT 1`;
   if (rows.length) {
@@ -490,7 +490,7 @@ async function approveBooking(sql, options) {
                AND date = ${booking.date}
                AND id <> ${options.bookingId}
                AND status IN ('requested', 'approved', 'confirmed')
-               AND start_time < (${candidateStart}::time + ${candidateHours} * interval '1 hour')
+               AND start_time::time < (${candidateStart}::time + ${candidateHours} * interval '1 hour')
                AND ${candidateStart}::time < (start_time::time + COALESCE(duration_hours_numeric, duration_hours::numeric) * interval '1 hour')
              LIMIT 1`;
           if (overlaps.length) {

@@ -32,7 +32,7 @@ function assertCompleteIntervalPredicate(text, label) {
   assert.ok(text, `${label}: overlap query must exist`);
   assert.match(
     text,
-    /AND start_time < \(\?::time \+ \? \* interval '1 hour'\) AND \?::time < \(start_time::time \+ COALESCE\(duration_hours_numeric, duration_hours::numeric\) \* interval '1 hour'\)/,
+    /AND start_time(?:::time)? < \(\?::time \+ \? \* interval '1 hour'\) AND \?::time < \(start_time::time \+ COALESCE\(duration_hours_numeric, duration_hours::numeric\) \* interval '1 hour'\)/,
     `${label}: must use existing_start < candidate_end AND candidate_start < existing_end`
   );
   assert.doesNotMatch(

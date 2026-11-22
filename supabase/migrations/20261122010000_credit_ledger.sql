@@ -184,6 +184,10 @@ RETURNS trigger
 LANGUAGE plpgsql
   SET search_path = public, pg_temp
 AS $$
+DECLARE
+  charged_total NUMERIC(14,2);
+  expected_total NUMERIC(14,2);
+  extra_hours NUMERIC(8,2);
 BEGIN
   IF NEW.owner_user_id IS DISTINCT FROM OLD.owner_user_id
      OR NEW.account_id IS DISTINCT FROM OLD.account_id
@@ -200,18 +204,56 @@ BEGIN
       USING ERRCODE = '23514';
   END IF;
 
-  -- Allow one-time legacy quote backfill: all four snapshots start NULL and
-  -- are completed together. Afterwards OLD values are non-NULL, so this branch
-  -- cannot run again and every later quote change is rejected.
+  charged_total := COALESCE(
+    OLD.credits_charged_numeric,
+    round(OLD.credits_charged::numeric, 2)
+  );
+
+  -- Fail-closed legacy reconciliation. A charged booking may receive only
+  -- its existing charged total; its financial components stay NULL. An
+  -- uncharged booking requires a complete, internally consistent operator
+  -- mapping. No path silently derives components from an event type.
   IF OLD.quoted_credits IS NULL
      AND OLD.quote_base_hours IS NULL
      AND OLD.quote_base_credits IS NULL
-     AND OLD.quote_extra_hour_credits IS NULL
-     AND NEW.quoted_credits IS NOT NULL
-     AND NEW.quote_base_hours IS NOT NULL
-     AND NEW.quote_base_credits IS NOT NULL
-     AND NEW.quote_extra_hour_credits IS NOT NULL THEN
-    RETURN NEW;
+     AND OLD.quote_extra_hour_credits IS NULL THEN
+    IF charged_total IS NOT NULL
+       AND charged_total > 0
+       AND NEW.quoted_credits IS NOT NULL
+       AND NEW.quote_base_hours IS NULL
+       AND NEW.quote_base_credits IS NULL
+       AND NEW.quote_extra_hour_credits IS NULL THEN
+      IF NEW.quoted_credits <> charged_total THEN
+        RAISE EXCEPTION 'charged legacy quote total must equal the existing charged amount'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END IF;
+
+    IF (charged_total IS NULL OR charged_total <= 0)
+       AND NEW.quoted_credits IS NOT NULL
+       AND NEW.quote_base_hours IS NOT NULL
+       AND NEW.quote_base_credits IS NOT NULL
+       AND NEW.quote_extra_hour_credits IS NOT NULL THEN
+      extra_hours := GREATEST(
+        COALESCE(OLD.duration_hours_numeric, round(OLD.duration_hours::numeric, 2))
+          - NEW.quote_base_hours,
+        0
+      );
+      expected_total := round(
+        NEW.quote_base_credits + extra_hours * NEW.quote_extra_hour_credits,
+        2
+      );
+      IF NEW.quote_base_hours <= 0
+         OR NEW.quote_base_credits <= 0
+         OR NEW.quote_extra_hour_credits < 0
+         OR expected_total IS NULL
+         OR NEW.quoted_credits <> expected_total THEN
+        RAISE EXCEPTION 'full legacy quote mapping must be explicit and internally consistent'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END IF;
   END IF;
 
   IF NEW.quoted_credits IS DISTINCT FROM OLD.quoted_credits
@@ -222,6 +264,26 @@ BEGIN
       USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.fill_legacy_booking_total(
+  p_booking_id TEXT,
+  p_total NUMERIC
+) RETURNS boolean
+LANGUAGE plpgsql
+  SET search_path = public, pg_temp
+AS $$
+BEGIN
+  UPDATE public.bookings
+     SET quoted_credits = p_total
+   WHERE id = p_booking_id
+     AND quoted_credits IS NULL
+     AND quote_base_hours IS NULL
+     AND quote_base_credits IS NULL
+     AND quote_extra_hour_credits IS NULL
+     AND COALESCE(credits_charged_numeric, round(credits_charged::numeric, 2)) = p_total;
+  RETURN FOUND;
 END;
 $$;
 
@@ -245,7 +307,8 @@ BEGIN
      AND quoted_credits IS NULL
      AND quote_base_hours IS NULL
      AND quote_base_credits IS NULL
-     AND quote_extra_hour_credits IS NULL;
+     AND quote_extra_hour_credits IS NULL
+     AND COALESCE(credits_charged_numeric, round(credits_charged::numeric, 2)) IS NULL;
   RETURN FOUND;
 END;
 $$;

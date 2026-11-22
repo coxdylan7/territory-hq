@@ -30,7 +30,7 @@ async function setupDatabase(t, { connections = 1 } = {}) {
   const clients = [sql];
   for (let i = 1; i < connections; i += 1) clients.push(makeClient());
 
-  await makeEnsureSchema(sql)();
+  await makeEnsureSchema(sql, { schema })();
   await seed(sql);
 
   t.after(async () => {
@@ -139,20 +139,20 @@ dbTest('real Postgres constraints protect the ledger, quote and state machine', 
     '23514'
   );
 
-  for (const entryType of ['booking_charge', 'booking_refund']) {
-    const values = {
-      id: crypto.randomUUID(),
-      bookingId: 'bk-constraints',
-      amount: entryType === 'booking_charge' ? -10 : 10,
-      reverses: entryType === 'booking_refund' ? entry.id : null,
-    };
-    await sql`
-      INSERT INTO credits (id, user_id, account_id, booking_id, amount, amount_numeric, entry_type, reverses_credit_id)
-      VALUES (${values.id}, 'owner-1', 'acc-1', ${values.bookingId}, ${values.amount}, ${values.amount}, ${entryType}, ${values.reverses})`;
-    await assertRejectsCode(sql`
-      INSERT INTO credits (id, user_id, account_id, booking_id, amount, amount_numeric, entry_type, reverses_credit_id)
-      VALUES (${crypto.randomUUID()}, 'owner-1', 'acc-1', ${values.bookingId}, ${values.amount}, ${values.amount}, ${entryType}, ${values.reverses})`, '23505');
-  }
+  const [charge] = await sql`
+    INSERT INTO credits (id, user_id, account_id, booking_id, amount, amount_numeric, entry_type)
+    VALUES (${crypto.randomUUID()}, 'owner-1', 'acc-1', 'bk-constraints', -10, -10, 'booking_charge')
+    RETURNING id`;
+  await assertRejectsCode(sql`
+    INSERT INTO credits (id, user_id, account_id, booking_id, amount, amount_numeric, entry_type)
+    VALUES (${crypto.randomUUID()}, 'owner-1', 'acc-1', 'bk-constraints', -10, -10, 'booking_charge')`, '23505');
+
+  await sql`
+    INSERT INTO credits (id, user_id, account_id, booking_id, amount, amount_numeric, entry_type, reverses_credit_id)
+    VALUES (${crypto.randomUUID()}, 'owner-1', 'acc-1', 'bk-constraints', 10, 10, 'booking_refund', ${charge.id})`;
+  await assertRejectsCode(sql`
+    INSERT INTO credits (id, user_id, account_id, booking_id, amount, amount_numeric, entry_type, reverses_credit_id)
+    VALUES (${crypto.randomUUID()}, 'owner-1', 'acc-1', 'bk-constraints', 10, 10, 'booking_refund', ${charge.id})`, '23505');
 });
 
 dbTest('real Postgres approval persists one charge, audit row and replay', async (t) => {
@@ -211,7 +211,7 @@ dbTest('real Postgres concurrent approvals cannot overspend one account', async 
   const { clients } = await setupDatabase(t, { connections: 2 });
   await addBalance(clients[0], '50.00');
   await addBooking(clients[0], 'bk-race-1', '40.00', 'requested', { startTime: '10:00' });
-  await addBooking(clients[0], 'bk-race-2', '40.00', 'requested', { startTime: '11:00' });
+  await addBooking(clients[0], 'bk-race-2', '40.00', 'requested', { startTime: '14:00' });
 
   const results = await Promise.all([
     approveBooking(clients[0], command('approve', 'bk-race-1')),
@@ -283,8 +283,17 @@ dbTest('real Postgres overlap checks reject equal and contained bookings and all
 });
 
 dbTest('real Postgres schema boot can be rerun with triggers already installed', async (t) => {
-  const { sql } = await setupDatabase(t);
-  await makeEnsureSchema(sql)();
+  const { sql, schema } = await setupDatabase(t);
+  const postgres = require('postgres');
+  const decoyAdmin = postgres(databaseUrl, { max: 1 });
+  const decoySchema = `ledger_decoy_${crypto.randomBytes(6).toString('hex')}`;
+  await decoyAdmin.unsafe(`CREATE SCHEMA "${decoySchema}"`);
+  await decoyAdmin.unsafe(`CREATE TABLE "${decoySchema}".bookings (id TEXT PRIMARY KEY)`);
+  t.after(async () => {
+    await decoyAdmin.unsafe(`DROP SCHEMA "${decoySchema}" CASCADE`);
+    await decoyAdmin.end({ timeout: 2 });
+  });
+  await makeEnsureSchema(sql, { schema })();
 
   const [bookings] = await sql`
     SELECT count(*)::int AS count
@@ -300,11 +309,85 @@ dbTest('real Postgres schema boot can be rerun with triggers already installed',
        AND tgname IN ('immutable_credits', 'enforce_booking_refund')`;
   assert.equal(bookings.count, 2);
   assert.equal(credits.count, 2);
+
+  const [selected] = await sql`
+    SELECT relrowsecurity, relforcerowsecurity
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = ${schema} AND c.relname = 'bookings'`;
+  assert.equal(selected.relrowsecurity, true);
+  assert.equal(selected.relforcerowsecurity, true);
+  const [decoy] = await sql`
+    SELECT relrowsecurity, relforcerowsecurity
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = ${decoySchema} AND c.relname = 'bookings'`;
+  assert.equal(decoy.relrowsecurity, false, 'an unrelated schema must not inherit protection');
+  assert.equal(decoy.relforcerowsecurity, false);
+
+  const functions = await sql`
+    SELECT p.proname, p.proconfig
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = ${schema}
+       AND p.proname IN (
+         'immutable_credits_guard', 'enforce_booking_refund_guard',
+         'immutable_booking_quote_guard', 'fill_legacy_booking_total',
+         'fill_legacy_booking_quote', 'enforce_booking_transition_guard'
+       )`;
+  assert.equal(functions.length, 6);
+  for (const fn of functions) {
+    assert.ok(
+      (fn.proconfig || []).some((setting) => setting === `search_path=${schema}, pg_temp`),
+      `${fn.proname} must use the selected schema as its fixed search_path`
+    );
+  }
 });
 
 dbTest('real Postgres legacy quote backfill runs once and then becomes immutable', async (t) => {
   const { sql } = await setupDatabase(t);
   await addBooking(sql, 'bk-legacy', '40.00', 'requested', { quote: false });
+  await addBooking(sql, 'bk-charged-legacy', '40.00', 'requested', { quote: false });
+  await addBooking(sql, 'bk-uncharged-legacy', '40.00', 'requested', {
+    quote: false,
+    durationHours: 6,
+  });
+  await sql`
+    UPDATE bookings
+       SET credits_charged = '40.00', credits_charged_numeric = '40.00'
+     WHERE id = 'bk-charged-legacy'`;
+
+  const [charged] = await sql`
+    SELECT fill_legacy_booking_total('bk-charged-legacy', '40.00') AS filled`;
+  assert.equal(charged.filled, true);
+  const [chargedRow] = await sql`
+    SELECT quoted_credits, quote_base_hours, quote_base_credits, quote_extra_hour_credits
+      FROM bookings WHERE id = 'bk-charged-legacy'`;
+  assert.equal(Number(chargedRow.quoted_credits), 40);
+  assert.equal(chargedRow.quote_base_hours, null, 'charged components must not be fabricated');
+  assert.equal(chargedRow.quote_base_credits, null);
+  assert.equal(chargedRow.quote_extra_hour_credits, null);
+  await assertRejectsCode(
+    sql`UPDATE bookings SET quoted_credits = '41.00' WHERE id = 'bk-charged-legacy'`,
+    '23514',
+    'a different charged total'
+  );
+  await assertRejectsCode(sql`
+    UPDATE bookings
+       SET quote_base_hours = '4.00', quote_base_credits = '40.00', quote_extra_hour_credits = '0.00'
+     WHERE id = 'bk-charged-legacy'`,
+  '23514',
+  'fabricated components on a charged booking'
+  );
+
+  await assertRejectsCode(sql`
+    UPDATE bookings
+       SET quoted_credits = '40.00', quote_base_hours = '4.00',
+           quote_base_credits = '40.00', quote_extra_hour_credits = '10.00'
+     WHERE id = 'bk-uncharged-legacy'`,
+  '23514',
+  'an uncharged mapping that ignores two extra hours'
+  );
 
   const [filled] = await sql`
     SELECT fill_legacy_booking_quote('bk-legacy', '40.00', '4.00', '40.00', '0.00') AS filled`;
@@ -465,7 +548,9 @@ dbTest('real Postgres invite activation isolates owners and accounts', async (t)
   assert.equal(wideForeign.status, 400);
   assert.equal(wideForeign.body.code, 'ACCOUNT_NOT_AVAILABLE');
 
-  const [usersBefore] = await sql`SELECT count(*)::int AS count FROM portal_users`;
+  const [usersBefore] = await sql`
+    SELECT count(*)::int AS count FROM portal_users
+     WHERE email IN ('bound@example.test', 'wide@example.test')`;
   assert.equal(usersBefore.count, 0);
   const [boundInvite] = await sql`SELECT used_at FROM portal_invites WHERE id = 'inv-bound'`;
   assert.equal(boundInvite.used_at, null);

@@ -135,6 +135,38 @@ test('the same key and hash replay the stored response without rerunning the han
   });
 });
 
+test('replayed response bodies stored as JSON strings are parsed', async () => {
+  const rows = [{
+    id: 'idem-1',
+    request_hash: 'hash-a',
+    response_status: 200,
+    response_body: '{"ledgerEntryId":"le-1","ok":true}',
+    completed_at: 'now',
+  }];
+  const { tx } = fakeTx((text) => {
+    if (/INSERT INTO api_idempotency/.test(text)) return [];
+    if (/SELECT[\s\S]*FROM api_idempotency/.test(text)) return rows;
+    return [];
+  });
+
+  const replay = await withIdempotency({
+    sql: tx,
+    ownerUserId: 'owner-1',
+    actor: { type: 'hq_user', id: 'user-1' },
+    operation: 'booking.approve',
+    resourceId: 'bk-1',
+    key: 'same-key',
+    requestHash: 'hash-a',
+    handler: async () => ({ status: 500, body: {} }),
+  });
+
+  assert.deepEqual(replay, {
+    status: 200,
+    body: { ledgerEntryId: 'le-1', ok: true },
+    replayed: true,
+  });
+});
+
 test('the same key with a different canonical hash is rejected without a state change', async () => {
   const row = { id: 'idem-1', request_hash: 'hash-a', completed_at: null };
   const { tx, calls } = fakeTx((text) => {

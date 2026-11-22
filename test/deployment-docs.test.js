@@ -8,8 +8,10 @@ const path = require('node:path');
 const root = path.join(__dirname, '..');
 const runbookPath = path.join(root, 'docs/supabase-deployment-runbook.md');
 const preflightPath = path.join(root, 'docs/credit-ledger-deployment-preflight.md');
+const configPath = path.join(root, 'supabase/config.toml');
 const runbook = fs.readFileSync(runbookPath, 'utf8');
 const preflight = fs.readFileSync(preflightPath, 'utf8');
+const config = fs.readFileSync(configPath, 'utf8');
 
 test('deployment runbook covers every required operational topic', () => {
   const topics = [
@@ -61,6 +63,11 @@ test('runbook and preflight document required legacy-data categories', () => {
   ]) {
     assert.match(`${runbook}\n${preflight}`, new RegExp(topic, 'i'), `documentation is missing: ${topic}`);
   }
+});
+
+test('Supabase config documents per-function import maps without an obsolete top-level section', () => {
+  assert.doesNotMatch(config, /^\[import_map\]/m, 'top-level [import_map] is not a current CLI config key');
+  assert.match(config, /functions\.<name>\.import_map/, 'config must point operators to the current per-function key');
 });
 
 test('runbook contains no credential values and never reads .env', () => {

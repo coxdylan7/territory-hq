@@ -14,5 +14,6 @@ enabled = true
 [studio]
 enabled = true
 
-[import_map]
-enabled = true
+# Deno import maps are configured per Function as functions.<name>.import_map
+# (default: supabase/functions/<name>/deno.json). The former top-level
+# [import_map] section is not a current Supabase CLI config key.
