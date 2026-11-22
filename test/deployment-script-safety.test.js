@@ -116,6 +116,14 @@ test('deployment scripts never use implicit database or project configuration', 
   }
 });
 
+test('read-only guard ignores SQL keywords inside string literals', () => {
+  const { assertReadOnlySql } = require('../scripts/lib/read-only-db');
+  const privileges = "SELECT 'accounts' AS table_name, has_table_privilege('anon', 'public.accounts', 'INSERT') AS can_insert;";
+  assert.equal(assertReadOnlySql(privileges), privileges);
+  assert.throws(() => assertReadOnlySql("SELECT 1; INSERT INTO public.users VALUES ('x')"), /only one statement/);
+  assert.throws(() => assertReadOnlySql("UPDATE public.users SET name = 'x'"), /only SELECT statements/);
+});
+
 test('deployment scripts are executable files with shebangs', () => {
   for (const script of scripts) {
     const file = path.join(scriptsDir, script);

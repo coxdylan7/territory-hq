@@ -79,13 +79,15 @@ function evaluate(results, requireValidatedConstraints) {
   if (!results['history-table'][0] || !results['history-table'][0].present) {
     fail('supabase_migrations.schema_migrations is missing');
   } else {
-    const applied = new Set(results.versions.map((row) => String(row.version)));
-    for (const version of expectedMigrations()) {
+    const versionOf = (value) => String(value).split('_')[0];
+    const applied = new Set(results.versions.map((row) => versionOf(row.version)));
+    const expected = expectedMigrations().map(versionOf);
+    for (const version of expected) {
       if (applied.has(version)) pass(`migration ${version} is recorded`);
       else fail(`migration ${version} is missing from history`);
     }
     for (const version of applied) {
-      if (!expectedMigrations().includes(version)) {
+      if (!expected.includes(version)) {
         line('INFO', `additional history entry: ${version}`);
       }
     }

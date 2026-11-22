@@ -73,8 +73,11 @@ function evaluate(results) {
   if (!results['history-table'][0] || !results['history-table'][0].present) {
     fail('supabase_migrations.schema_migrations is missing; migration order cannot be proven');
   } else {
-    const applied = new Set(results.versions.map((row) => String(row.version)));
-    const expected = expectedMigrations();
+    // schema_migrations stores only the numeric version, while the local
+    // migration files include a descriptive suffix after an underscore.
+    const versionOf = (value) => String(value).split('_')[0];
+    const applied = new Set(results.versions.map((row) => versionOf(row.version)));
+    const expected = expectedMigrations().map(versionOf);
     for (const version of expected.slice(0, 2)) {
       if (applied.has(version)) pass(`migration ${version} is recorded`);
       else fail(`migration ${version} is not recorded in history`);

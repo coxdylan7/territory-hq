@@ -112,6 +112,11 @@ local chain, or the dry run lists an unexpected migration.
 
 ## 6. Legacy-data preflight (read-only, disposable target only)
 
+This check inspects the quote columns added by the credit-ledger migration, so
+run it **after** section 8's `db push`, not before. The ordering here is
+historical; `docs/credit-ledger-deployment-preflight.md` has the correct
+apply-then-inspect sequence.
+
 Dry run first, with a non-secret placeholder:
 
 ```sh

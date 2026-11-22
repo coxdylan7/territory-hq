@@ -74,6 +74,7 @@ CREATE INDEX IF NOT EXISTS credits_owner_account_created_idx
 CREATE OR REPLACE FUNCTION public.immutable_credits_guard()
 RETURNS trigger
 LANGUAGE plpgsql
+  SET search_path = public, pg_temp
 AS $$
 BEGIN
   RAISE EXCEPTION 'credits is an append-only ledger'
@@ -91,6 +92,7 @@ CREATE TRIGGER immutable_credits
 CREATE OR REPLACE FUNCTION public.enforce_booking_refund_guard()
 RETURNS trigger
 LANGUAGE plpgsql
+  SET search_path = public, pg_temp
 AS $$
 DECLARE
   charge public.credits%ROWTYPE;
@@ -180,6 +182,7 @@ CREATE INDEX IF NOT EXISTS portal_users_owner_role_status_idx
 CREATE OR REPLACE FUNCTION public.immutable_booking_quote_guard()
 RETURNS trigger
 LANGUAGE plpgsql
+  SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.owner_user_id IS DISTINCT FROM OLD.owner_user_id
@@ -230,6 +233,7 @@ CREATE OR REPLACE FUNCTION public.fill_legacy_booking_quote(
   p_extra_hour_credits NUMERIC
 ) RETURNS boolean
 LANGUAGE plpgsql
+  SET search_path = public, pg_temp
 AS $$
 BEGIN
   UPDATE public.bookings
@@ -254,6 +258,7 @@ CREATE TRIGGER immutable_booking_quote
 CREATE OR REPLACE FUNCTION public.enforce_booking_transition_guard()
 RETURNS trigger
 LANGUAGE plpgsql
+  SET search_path = public, pg_temp
 AS $$
 BEGIN
   IF NEW.status IS DISTINCT FROM OLD.status THEN

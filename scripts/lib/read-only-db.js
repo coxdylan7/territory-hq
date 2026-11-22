@@ -8,6 +8,14 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const { redactSecrets, repoPath } = require('./deployment-target');
 
+function withoutStringLiterals(text) {
+  // SQL keywords inside string literals are data, not statements. Handle both
+  // standard doubled quotes and backslash-escaped E'...' literals.
+  return String(text)
+    .replace(/(?:[Ee])?'(?:''|\\.|[^'\\])*'/g, "''")
+    .replace(/"(?:[^"]|"")*"/g, '""');
+}
+
 function assertReadOnlySql(text) {
   const withoutComments = String(text).replace(/--[^\n]*/g, '').trim();
   if (!/^(select|with)\b/i.test(withoutComments)) {
@@ -17,7 +25,8 @@ function assertReadOnlySql(text) {
   if (single.includes(';')) {
     throw new Error('only one statement per query is allowed');
   }
-  if (/\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|copy|call|do|execute|vacuum|analyze|refresh|set|reset|begin|commit|rollback)\b/i.test(single)) {
+  const code = withoutStringLiterals(single);
+  if (/\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|copy|call|do|execute|vacuum|analyze|refresh|set|reset|begin|commit|rollback)\b/i.test(code)) {
     throw new Error('data-modifying or session-changing SQL is not allowed');
   }
   return text;
