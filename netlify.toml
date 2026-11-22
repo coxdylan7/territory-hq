@@ -15,6 +15,7 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
   external_node_modules = ["express", "postgres"]
+  included_files = ["node_modules/**"]
 
 # API rules must stay before the SPA fallback so no /api path serves index.html.
 [[redirects]]

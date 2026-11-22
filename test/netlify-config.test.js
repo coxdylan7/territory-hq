@@ -56,6 +56,11 @@ test('each netlify.toml is discovered at its Git CI base and uses base-relative 
       ['express', 'postgres'],
       `${site.name}: runtime externals are copied into the function package`
     );
+    assert.deepEqual(
+      config.functions.included_files,
+      ['node_modules/**'],
+      `${site.name}: base runtime dependencies are included in the deployed function archive`
+    );
     assert.ok(existsSync(fromBase(site, site.functionsDir)), `${site.name}: functions directory exists at base`);
     assert.ok(
       readdirSync(fromBase(site, site.functionsDir)).some((f) => f.startsWith(site.functionName + '.')),
