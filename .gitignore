@@ -8,6 +8,7 @@ dist/
 api/dist/
 
 # env / secrets
+backups/
 .env
 .env.local
 .env.production
