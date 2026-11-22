@@ -12,6 +12,8 @@ const {
   removePortalUsersBookings,
 } = require('../src/booking-service');
 const { activatePortalInvite } = require('../../portal/api/src/invite-activation');
+const { createBlastService } = require('../src/messages-blast');
+const { canonicalRequestHash } = require('../src/idempotency');
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const dbTest = databaseUrl ? test : test.skip;
@@ -607,4 +609,70 @@ dbTest('real Postgres ambassador removal downgrades and audits a confirmed booki
     SELECT count(*)::int AS count FROM booking_events
      WHERE booking_id = 'bk-removal' AND action = 'ambassador_removed'`;
   assert.equal(auditsAfterReplay.count, 1);
+});
+
+dbTest('real Postgres blast replay reuses batch and recipient idempotency without duplicate SMS', async (t) => {
+  const { sql } = await setupDatabase(t);
+  await sql`UPDATE accounts SET phone = '+15551234567' WHERE id = 'acc-1'`;
+
+  let sends = 0;
+  const service = createBlastService({
+    sql,
+    smsConfigured: () => true,
+    sendSmsTwilio: async () => { sends += 1; return { sent: true, sid: `sm-${sends}` }; },
+  });
+  const args = {
+    ownerUserId: 'owner-1',
+    actor: { type: 'hq_user', id: 'owner-1' },
+    key: 'blast-pg-key',
+    accountIds: ['acc-1'],
+    template: 'Hi {name}',
+  };
+
+  const first = await service.sendBlast(args);
+  assert.equal(first.status, 200);
+  assert.equal(first.body.sent, 1);
+  assert.equal(sends, 1);
+
+  const replay = await service.sendBlast(args);
+  assert.equal(replay.replayed, true);
+  assert.deepEqual(replay.body, first.body);
+  assert.equal(sends, 1);
+
+  // Simulate a batch response that was lost after a recipient reservation was
+  // committed. Clearing the batch record leaves the recipient claim intact, so
+  // the retry must rebuild the result from that persisted recipient.
+  await sql`
+    UPDATE api_idempotency
+       SET completed_at = NULL, response_status = NULL, response_body = NULL
+     WHERE operation = 'messages.blast' AND idempotency_key = 'blast-pg-key'`;
+  const recipientHash = canonicalRequestHash({
+    operation: 'messages.blast.recipient',
+    resourceId: 'acc-1',
+    actor: args.actor,
+    body: { batchKey: args.key, accountId: 'acc-1', phone: '+15551234567', text: 'Hi Account One' },
+  });
+  await sql`
+    UPDATE api_idempotency
+       SET response_body = ${JSON.stringify({
+         accountId: 'acc-1', ok: true, sent: true, status: 'sent', reason: 'sent', messageId: first.body.results[0].messageId,
+       })}::jsonb
+     WHERE operation = 'messages.blast.recipient' AND request_hash = ${recipientHash}`;
+  const retry = await service.sendBlast(args);
+  assert.equal(retry.replayed, false);
+  assert.equal(retry.body.sent, 1);
+  assert.equal(sends, 1, 'a lost batch response must never cause a second Twilio send');
+
+  const [messageCount] = await sql`
+    SELECT count(*)::int AS count FROM messages
+     WHERE user_id = 'owner-1' AND blast_id = ${first.body.blastId}`;
+  assert.equal(messageCount.count, 1);
+  const [batchRows] = await sql`
+    SELECT count(*)::int AS count FROM api_idempotency
+     WHERE operation = 'messages.blast' AND idempotency_key = 'blast-pg-key'`;
+  assert.equal(batchRows.count, 1);
+  const [recipientRows] = await sql`
+    SELECT count(*)::int AS count FROM api_idempotency
+     WHERE operation = 'messages.blast.recipient'`;
+  assert.equal(recipientRows.count, 1);
 });

@@ -6,6 +6,13 @@
   "engines": {
     "node": ">=20"
   },
+  "dependencies": {
+    "@netlify/aws-lambda-compat": "^2.0.4",
+    "serverless-http": "^4.0.0"
+  },
+  "devDependencies": {
+    "smol-toml": "^1.9.1"
+  },
   "scripts": {
     "build": "npm --prefix web install --no-audit --no-fund && npm --prefix web run build",
     "build:portal": "npm --prefix portal run build",

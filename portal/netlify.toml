@@ -1,0 +1,41 @@
+# Territory Portal — Netlify site.
+# Set Package directory to "portal" in the Netlify UI (cannot be set in TOML).
+# Base remains the repository root, so all paths here are base-relative.
+"$schema" = "https://open-api.netlify.com/netlify.schema.json"
+
+[build]
+  command = "npm --prefix portal/api install --no-audit --no-fund && npm --prefix portal/web install --no-audit --no-fund && npm --prefix portal/web run build"
+  publish = "portal/web/dist"
+
+[build.environment]
+  NODE_VERSION = "22.12.0"
+
+[functions]
+  directory = "portal/netlify/functions"
+
+[[redirects]]
+  from = "/api"
+  to = "/.netlify/functions/portal-api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/portal-api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://maps.googleapis.com https://maps.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://maps.googleapis.com https://maps.gstatic.com https://*.googleusercontent.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://data.ny.gov https://nominatim.openstreetmap.org https://router.project-osrm.org https://maps.googleapis.com; media-src 'self' blob:; worker-src 'self' blob:"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"

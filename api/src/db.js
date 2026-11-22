@@ -1,20 +1,16 @@
 // Supabase Postgres (via Postgres.js) — mirrors the Turso/libSQL `sql()` helper's
 // return shape: `await sql(...)` yields an array of plain objects.
-const postgres = require('postgres');
+// The client is created lazily by the shared factory so importing this module
+// never opens a connection; see db-client.js for the fail-closed behaviour.
+const { makeSql } = require('./db-client');
 
-const url = (process.env.DATABASE_URL || '').trim();
-if (!url) {
-  console.error('FATAL: DATABASE_URL is not set. Copy .env.example to .env and add your Supabase connection string.');
-  process.exit(1);
-}
-
-// prepare:false — required when talking through PgBouncer (Supabase transaction pooler).
-const sql = postgres(url, {
-  prepare: false,
-  connection: { application_name: 'territory-hq' },
+const { sql } = makeSql({
   max: 4,
   idle_timeout: 20,
   connect_timeout: 15,
+  // prepare:false — required when talking through PgBouncer (transaction pooler).
+  prepare: false,
+  connection: { application_name: 'territory-hq' },
 });
 
 module.exports = { sql };

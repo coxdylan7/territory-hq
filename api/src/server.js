@@ -3,9 +3,15 @@ const crypto = require('crypto');
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
-const { sql } = require('./db');
+const { sql: defaultSql } = require('./db');
+const { databaseUrl } = require('./db-client');
 const { ensureSchema } = require('./schema');
-const { smsConfigured, sendSmsTwilio, proxyAnthropic } = require('./integrations');
+const {
+  smsConfigured,
+  sendSmsTwilio: defaultSendSmsTwilio,
+  proxyAnthropic,
+} = require('./integrations');
+const { createBlastService } = require('./messages-blast');
 const { resolveCrossAppOwner } = require('./cross-app-auth');
 const { makeCrossAppHandlers } = require('./cross-app-handlers');
 const { makeErrorHandler, internalError } = require('./error-handler');
@@ -31,6 +37,15 @@ const {
   bookingView: sharedBookingView,
 } = require('./booking-service');
 
+// The app is built in a factory so a Netlify Function can import it without
+// starting a listening socket. Local/Docker use still calls start() below.
+function createApp(options = {}) {
+const sql = options.sql || defaultSql;
+const sendSmsTwilio = options.sendSmsTwilio || defaultSendSmsTwilio;
+const blastService = options.blastService || createBlastService({ sql, sendSmsTwilio });
+const serveWeb = options.serveWeb === undefined
+  ? process.env.SERVE_WEB !== 'false'
+  : options.serveWeb;
 const app = express();
 app.disable('x-powered-by');
 // Forwarded protocol/host headers are trusted only when the operator opts in.
@@ -408,29 +423,28 @@ app.post('/api/messages/send', gate(async (req, res, user) => {
   return json(res, { id, sent: result.sent, reason: result.reason });
 }));
 
-// bulk SMS blast — same message to many accounts
+// Bounded bulk SMS blast. The service owns the recipient cap, the worker-pool
+// concurrency, Twilio timeouts and replay safety; this route only supplies the
+// authenticated owner and the command idempotency context.
 app.post('/api/messages/blast', gate(async (req, res, user) => {
-  const { accountIds, template } = req.body || {};
-  if (!Array.isArray(accountIds) || !accountIds.length) return json(res, { error: 'No recipients selected.' }, 400);
-  const blastId = 'blast' + Date.now();
-  const results = [];
-  for (const accId of accountIds) {
-    const rows = await sql`SELECT * FROM accounts WHERE id = ${accId} AND user_id = ${user.id}`;
-    const acc = rows[0];
-    if (!acc || !acc.phone) { results.push({ accountId: accId, ok: false, reason: 'no phone on file' }); continue; }
-    const text = String(template || '').replace(/\{name\}/gi, acc.name || '');
-    const result = await sendSmsTwilio(acc.phone, text);
-    const status = result.sent ? 'sent' : 'queued';
-    const id = 'msg' + Date.now() + Math.random().toString(36).slice(2, 6);
-    await sql`
-      INSERT INTO messages (id, account_id, account_name, license_number, city, channel, purpose, body, recipient, direction, date, status, blast_id, user_id)
-      VALUES (${id}, ${acc.id}, ${acc.name}, ${acc.license_number || ''}, ${acc.city || ''}, 'text', 'SMS blast', ${text}, ${acc.phone}, 'outbound', ${new Date().toISOString()}, ${status}, ${blastId}, ${user.id})`;
-    results.push({ accountId: accId, ok: true, sent: result.sent, reason: result.reason });
+  const body = req.body || {};
+  const context = commandContext(req, res, user, 'messages.blast', null);
+  if (!context) return undefined;
+  try {
+    const result = await blastService.sendBlast({
+      ownerUserId: user.id,
+      actor: context.actor,
+      key: context.key,
+      accountIds: body.accountIds,
+      template: body.template,
+    });
+    return sendCommandResult(res, result);
+  } catch (error) {
+    if (error && Number.isInteger(error.status) && error.code) {
+      return sendCommandResult(res, { status: error.status, body: errorBody(error) });
+    }
+    return json(res, internalError('SMS blast', error), 500);
   }
-  const sentCount = results.filter((r) => r.sent).length;
-  const queuedCount = results.filter((r) => r.ok && !r.sent).length;
-  const skipped = results.filter((r) => !r.ok).length;
-  return json(res, { blastId, sent: sentCount, queued: queuedCount, skipped, smsEnabled: smsConfigured(), results });
 }));
 
 /* ================= store portal ================= */
@@ -686,12 +700,14 @@ app.post('/api/generate-message', gate(async (req, res, user) => {
   return json(res, data);
 }));
 
-/* ================= catch-all ================= */
+/* ================= health + catch-all ================= */
+// Database-independent: safe smoke endpoint on Netlify and Docker alike.
+app.get('/api/health', (req, res) => json(res, { ok: true, service: 'hq' }));
 app.use('/api', (req, res) => json(res, { error: 'not found' }, 404));
 
 /* ================= static frontend (production) ================= */
 const WEB_DIST = path.resolve(__dirname, '../../web/dist');
-if (process.env.SERVE_WEB !== 'false' && fs.existsSync(WEB_DIST)) {
+if (serveWeb && fs.existsSync(WEB_DIST)) {
   app.use(express.static(WEB_DIST));
   app.use((req, res, next) => {
     if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
@@ -701,19 +717,44 @@ if (process.env.SERVE_WEB !== 'false' && fs.existsSync(WEB_DIST)) {
 
 /* ================= error handling ================= */
 app.use(makeErrorHandler());
+return app;
+}
 
-/* ================= start ================= */
-const PORT = parseInt(process.env.PORT || '8080', 10);
-const boot = process.env.SKIP_SCHEMA === '1'
-  ? Promise.resolve()
-  : ensureSchema();
-boot
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Territory HQ API listening on http://localhost:${PORT}`);
+let cachedApp;
+function getApp(options) {
+  if (!cachedApp) cachedApp = createApp(options);
+  return cachedApp;
+}
+
+/* ================= start (local/Docker only) ================= */
+function start(options = {}) {
+  const env = options.env || process.env;
+  const logger = options.logger || console;
+  const listen = options.listen || ((app, port) => app.listen(port, () => {
+    logger.log(`Territory HQ API listening on http://localhost:${port}`);
+  }));
+
+  try {
+    databaseUrl(env);
+  } catch (error) {
+    logger.error('FATAL: DATABASE_URL is required for the Territory HQ API.');
+    if (options.exit !== false) process.exit(1);
+    return Promise.reject(error);
+  }
+
+  const boot = env.SKIP_SCHEMA === '1'
+    ? Promise.resolve()
+    : Promise.resolve().then(() => (options.ensureSchema || ensureSchema)());
+
+  return Promise.resolve(boot)
+    .then(() => listen(getApp(), parseInt(env.PORT || '8080', 10)))
+    .catch((error) => {
+      logger.error('FATAL: could not start the Territory HQ API (check DATABASE_URL).');
+      if (options.exit !== false) process.exit(1);
+      throw error;
     });
-  })
-  .catch((e) => {
-    console.error('FATAL: could not reach the database (check DATABASE_URL).', e && e.message ? e.message : e);
-    process.exit(1);
-  });
+}
+
+if (require.main === module) start();
+
+module.exports = { createApp, getApp, start };

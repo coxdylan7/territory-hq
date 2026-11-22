@@ -7,6 +7,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const { sql } = require('./db');
+const { databaseUrl } = require('../../../api/src/db-client');
 const { securityHeadersMiddleware } = require('../../../api/src/security-headers');
 const { csrfMiddleware } = require('../../../api/src/csrf');
 const { corsMiddleware } = require('../../../api/src/cors');
@@ -28,6 +29,11 @@ const {
 const { logoutSession } = require('./logout');
 const { activatePortalInvite } = require('./invite-activation');
 
+// Built in a factory so a Netlify Function can import it without listening.
+function createApp(options = {}) {
+const serveWeb = options.serveWeb === undefined
+  ? process.env.SERVE_WEB !== 'false'
+  : options.serveWeb;
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', trustProxySetting(process.env.TRUST_PROXY));
@@ -36,7 +42,6 @@ app.use(corsMiddleware());
 app.use(csrfMiddleware());
 app.use(express.json({ limit: '1mb' }));
 
-const PORT = Number(process.env.PORT || 8081);
 const SESSION_DAYS = 30;
 const PBKDF2_ITER = 310000;
 
@@ -362,16 +367,52 @@ app.put('/api/bookings/:id/complete', gate, async (req, res) => {
   }));
 });
 
-// ---------------------------------------------------------------- static web
+// ------------------------------------------------- health + API-only fallback
+app.get('/api/health', (req, res) => ok(res, { ok: true, service: 'portal' }));
+app.use('/api', (req, res) => fail(res, 404, 'not found'));
 
+// ---------------------------------------------------------------- static web
 const dist = path.join(__dirname, '..', '..', 'web', 'dist');
-if (fs.existsSync(dist)) {
+if (serveWeb && fs.existsSync(dist)) {
   app.use(express.static(dist, { maxAge: '1d' }));
   app.get(/^(?!\/api\/).*/, (req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 
 app.use((req, res) => fail(res, 404, 'not found'));
+return app;
+}
 
-app.listen(PORT, () => {
-  console.log('territory-portal listening on :' + PORT);
-});
+let cachedApp;
+function getApp(options) {
+  if (!cachedApp) cachedApp = createApp(options);
+  return cachedApp;
+}
+
+/* ================= start (local/Docker only) ================= */
+function start(options = {}) {
+  const env = options.env || process.env;
+  const logger = options.logger || console;
+  const listen = options.listen || ((app, port) => app.listen(port, () => {
+    logger.log(`territory-portal listening on :${port}`);
+  }));
+
+  try {
+    databaseUrl(env);
+  } catch (error) {
+    logger.error('FATAL: DATABASE_URL is required for the Territory Portal API.');
+    if (options.exit !== false) process.exit(1);
+    return Promise.reject(error);
+  }
+
+  return Promise.resolve()
+    .then(() => listen(getApp(), Number(env.PORT || 8081)))
+    .catch((error) => {
+      logger.error('FATAL: could not start the Territory Portal API (check DATABASE_URL).');
+      if (options.exit !== false) process.exit(1);
+      throw error;
+    });
+}
+
+if (require.main === module) start();
+
+module.exports = { createApp, getApp, start };

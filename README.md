@@ -133,7 +133,9 @@ client-side code.
 ## 2. Configure server secrets
 
 Copy `api/.env.example` to `api/.env` for local development, or set the same
-variables in your host's environment/dashboard (e.g. Render):
+variables as site environment variables in Netlify. Do not read or copy `.env`
+into a build command or repository file. See `docs/netlify-deployment.md` for
+the exact two-site configuration.
 
 | Name | Purpose |
 |------|---------|
@@ -163,20 +165,29 @@ accepted. Exact owner ids come from your `users.id` values.
 
 ## 3. Deploy
 
-The repo includes a `Dockerfile` for the main API, a `portal/Dockerfile` for the
-portal API, and `render.yaml` as a starting blueprint. Set the environment
-variables above in the hosting provider; do not bake them into the image.
+Netlify is the authoritative web hosting target for
+`github.com/coxdylan7/territory-hq`. Use two independent Netlify sites from
+this repository. The full, exact UI settings, environment gates, smoke tests,
+rollback steps, and runtime blocker are in
+`docs/netlify-deployment.md`.
 
-Static-only hosting can publish `web/dist` or `portal/web/dist`, but it requires
-a separately deployed, **external compatible Express API** for `/api/*`; no
-serverless backend is bundled with the Vite builds. Configure exact
-`PUBLIC_ORIGIN` and `FIRST_PARTY_ORIGINS` values on both the API and the client
-so HttpOnly cookies, credentialed CORS and CSRF checks work, and set
-`ALLOWED_ORIGINS` for owner-scoped cross-app bearer reads. Reverse-proxying
-`/api/*` to the Express API on the same origin is the simplest setup; otherwise
-every origin must be listed exactly. Static hosts that ignore
-`web/public/_headers` or `portal/web/public/_headers`, or that cannot serve an
-external Express API with this configuration, are unsupported.
+| Site | Package directory | Base directory | Config | Publish | Functions |
+|------|-------------------|----------------|--------|---------|-----------|
+| HQ | repository root (leave blank) | repository root (leave unset) | `netlify.toml` | `web/dist` | `netlify/functions` |
+| Portal | `portal` | repository root (leave unset) | `portal/netlify.toml` | `portal/web/dist` | `portal/netlify/functions` |
+
+Both sites use Node `22.12.0`. Each `/api` and `/api/*` request is rewritten
+before the SPA fallback to a Netlify Function that calls the existing Express
+app; the browser never talks directly to Supabase. Set `DATABASE_URL`,
+`SKIP_SCHEMA=1`, `PUBLIC_ORIGIN`, `FIRST_PARTY_ORIGINS`, and `TRUST_PROXY=1` as
+site environment variables on both sites, plus `PORTAL_URL` on HQ and optional
+existing secrets as documented in the runbook. Never expose `DATABASE_URL` to a
+Vite bundle.
+
+Deploy HQ first, then Portal, and run the smoke tests in the runbook before
+switching traffic. Render and Railway are legacy, non-authoritative hosting
+paths retained only as a temporary rollback option; `render.yaml` and the
+Dockerfiles remain for local/Docker use and disaster recovery.
 
 Build and start locally:
 
@@ -186,6 +197,12 @@ npm --prefix portal run build
 npm run dev:api
 npm --prefix portal start
 ```
+
+> `POST /api/messages/blast` is bounded for Netlify: at most 10 recipients per
+> request, 5 concurrent Twilio sends with an 8-second timeout each, and a
+> documented 28-second worst case including headroom. Larger selections are
+> chunked by the web client, and each batch is idempotent. See
+> `docs/netlify-deployment.md` for the operational limits and smoke tests.
 
 ## 4. First run
 
@@ -214,6 +231,7 @@ Unknown tokens, legacy `READ_TOKEN` values, and malformed configuration return
 ## 6. Tests and verification
 
 ```sh
+npm test                       # root config/adapters + all four package suites
 npm --prefix api test          # API security tests; no database required
 npm --prefix portal/api test   # portal session regression tests
 npm --prefix web test          # report escaping and print-window tests
@@ -254,8 +272,9 @@ verified separately in a disposable local/branch database with
   `unsafe-inline`/`unsafe-eval`.
 - The legacy public/index.html retired: its unescaped print export and inline
   print script are no longer part of any deploy surface. Only the Vite builds
-  in `web/dist` and `portal/web/dist` are published; `/api/*` is served by an
-  external Express API, not by a bundled serverless function.
+  in `web/dist` and `portal/web/dist` are published; on Netlify, `/api/*` is
+  served by a same-origin function adapter around the existing Express app.
+  The retired direct-browser Supabase API is not restored.
 - Cookies use `SameSite=Lax`. Production should keep HQ/portal web and API on
   the same site, or configure exact `PUBLIC_ORIGIN`/`FIRST_PARTY_ORIGINS` for
   same-site cross-origin apps. True cross-site cookies would additionally need

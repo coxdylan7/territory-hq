@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useStore } from '../store';
-import { api } from '../api';
+import { api, newIdempotencyKey } from '../api';
 import { logMessage } from '../actions';
 import { Section, Empty } from '../components';
+import {
+  createBlastRun,
+  aggregateBlastResults,
+  shouldStopAfterBatch,
+  formatBlastProgress,
+  createSubmitGuard,
+} from '../blast-batches.js';
 
 const PURPOSES = [
   'First outreach / introduction',
@@ -37,6 +44,8 @@ export default function Messages() {
   const [blastText, setBlastText] = useState('');
   const [blastOut, setBlastOut] = useState('');
   const [blastLoading, setBlastLoading] = useState(false);
+  const blastGuardRef = useRef(null);
+  if (!blastGuardRef.current) blastGuardRef.current = createSubmitGuard();
 
   const acc = st.accounts.find((a) => a.id === accountId);
   const isText = channel !== 'Email';
@@ -110,16 +119,51 @@ ${lengthNote} No corporate jargon. ${isText ? 'No subject line.' : 'Include a sh
     const ids = Object.keys(selected).filter((k) => selected[k]);
     if (!ids.length) { st.showToast('Select at least one recipient.'); return; }
     if (!blastText.trim()) { st.showToast('Write a message first.'); return; }
+    const guard = blastGuardRef.current;
+    if (!guard.start()) return;
+
+    const run = createBlastRun(ids, { createRunId: newIdempotencyKey });
+    const outcomes = [];
+    let stopped = false;
+    let stopError = null;
     setBlastLoading(true);
-    setBlastOut('Sending…');
+    setBlastOut(`Starting ${run.batches.length} batch(es) for ${run.total} recipients…`);
     try {
-      const r = await api.post('/api/messages/blast', { accountIds: ids, template: blastText });
-      set({ messages: await api.get('/api/messages') });
-      setBlastOut(`${r.sent} sent live, ${r.queued} logged as queued${r.skipped ? ', ' + r.skipped + ' skipped (no phone)' : ''}.${r.smsEnabled ? '' : ' Connect an SMS provider to make queued messages send for real.'}`);
-      st.showToast('Blast complete.');
-    } catch (err) {
-      setBlastOut('Blast failed: ' + err.message);
+      for (const batch of run.batches) {
+        let outcome;
+        try {
+          const body = await api.action('POST', '/api/messages/blast', {
+            accountIds: batch.accountIds,
+            template: blastText,
+          }, { idempotencyKey: batch.idempotencyKey });
+          outcome = { batchIndex: batch.index, status: 200, body };
+        } catch (err) {
+          outcome = { batchIndex: batch.index, status: err.status || 0, error: err.message };
+        }
+        outcomes.push(outcome);
+        setBlastOut(formatBlastProgress(aggregateBlastResults({
+          total: run.total, results: outcomes, stopped: false,
+        }), batch.index + 1, run.batches.length));
+        if (shouldStopAfterBatch(outcome)) {
+          stopped = true;
+          stopError = outcome.error || `Batch ${batch.index + 1} was rejected.`;
+          break;
+        }
+      }
+
+      try {
+        set({ messages: await api.get('/api/messages') });
+      } catch (err) {
+        stopped = true;
+        stopError = `message history refresh failed: ${err.message}`;
+      }
+      const aggregate = aggregateBlastResults({ total: run.total, results: outcomes, stopped, error: stopError });
+      setBlastOut(formatBlastProgress(aggregate, outcomes.length, run.batches.length, {
+        final: true, stopped, error: stopError,
+      }));
+      st.showToast(stopped ? 'Blast stopped after a batch error.' : 'Blast complete.');
     } finally {
+      guard.release();
       setBlastLoading(false);
     }
   }

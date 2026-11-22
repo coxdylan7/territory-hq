@@ -1,6 +1,7 @@
-const postgres = require('postgres');
+// Portal database access uses the same lazy, fail-closed factory as HQ.
+const { makeSql } = require('../../../api/src/db-client');
 
-const sql = postgres(process.env.DATABASE_URL, {
+const { sql } = makeSql({
   max: 10,
   idle_timeout: 30,
   prepare: false,

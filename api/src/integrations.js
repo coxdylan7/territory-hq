@@ -1,26 +1,36 @@
 // Twilio SMS + Anthropic proxy — ports of the original integrations
 const crypto = require('crypto');
+const { BLAST_LIMITS } = require('../../shared/blast-limits.cjs');
 
 /* ---------------- Twilio (optional) ---------------- */
 function smsConfigured() {
   return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER);
 }
-async function sendSmsTwilio(to, bodyText) {
+async function sendSmsTwilio(to, bodyText, options = {}) {
   if (!smsConfigured()) return { sent: false, reason: 'not_configured' };
   const sid = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN, from = process.env.TWILIO_FROM_NUMBER;
   const auth = Buffer.from(sid + ':' + token).toString('base64');
   const params = new URLSearchParams({ To: to, From: from, Body: bodyText });
+  const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+    ? options.timeoutMs
+    : BLAST_LIMITS.twilioTimeoutMs;
+  const signal = options.signal || AbortSignal.timeout(timeoutMs);
   try {
     const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST',
       headers: { Authorization: 'Basic ' + auth, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: params.toString(),
+      signal,
     });
     const data = await res.json();
     if (!res.ok) return { sent: false, reason: data.message || ('http ' + res.status) };
     return { sent: true, sid: data.sid };
   } catch (e) {
-    return { sent: false, reason: e.message };
+    const timedOut = signal.aborted || e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    return {
+      sent: false,
+      reason: timedOut ? `timeout after ${timeoutMs}ms` : (e && e.message ? e.message : 'send failed'),
+    };
   }
 }
 

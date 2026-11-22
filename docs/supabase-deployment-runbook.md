@@ -359,8 +359,9 @@ migration. On staging, the verification script can be made stricter with
 
 Run after each rollout and record results in the change ticket:
 
-1. `GET /api/health` (or the configured root health route) returns 200 on both
-   APIs; TLS and `PUBLIC_ORIGIN` are correct.
+1. `GET /api/health` returns 200 on both APIs; TLS and `PUBLIC_ORIGIN` are
+   correct. On Netlify hosting, follow `docs/netlify-deployment.md` for the
+   two-site build settings, environment gates, and cutover blocker.
 2. Sign in to HQ and the portal; confirm `thq_session` and `tp_session` are
    HttpOnly, `Secure` in production, and absent from browser storage.
 3. Create a credit grant; read the balance before and after and confirm the
