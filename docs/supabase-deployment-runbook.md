@@ -8,7 +8,12 @@ repository. Every command below is run by an operator tomorrow, explicitly.
 ## 0. Safety rules and required environment variables
 
 - Treat `supabase/config.toml`'s `project_id` as a protected, production-like
-  reference. Never infer a target from it; always pass `--project-ref`.
+  reference. Never infer a target from it; always pass an explicit ref with
+  `--remote=<ref>` (CLI v3), except to `supabase link`, which still takes
+  `--project-ref`.
+- CLI v3 is local by default: every hosted database command must use `--remote`
+  (or `--remote=<ref>`). Hosted changes prompt for confirmation and default to
+  No; do not pass `--yes` to skip that gate.
 - Never run `supabase db push` without first running its `--dry-run` form.
 - The preflight script refuses `production` entirely. Production data must be
   preflighted on a fresh disposable branch/copy, never in place.
@@ -39,9 +44,9 @@ documented):
 ```sh
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 mkdir -p backups
-supabase db dump --linked --dry-run
-supabase db dump --linked --file "backups/${STAMP}-schema.sql"
-supabase db dump --linked --data-only --file "backups/${STAMP}-data.sql"
+supabase db dump --remote="$PRODUCTION_REF" --dry-run
+supabase db dump --remote="$PRODUCTION_REF" --file "backups/${STAMP}-schema.sql"
+supabase db dump --remote="$PRODUCTION_REF" --data-only --file "backups/${STAMP}-data.sql"
 ls -l "backups/${STAMP}-schema.sql" "backups/${STAMP}-data.sql"
 ```
 
@@ -55,7 +60,7 @@ Create a branch with production-shaped data, then use its own ref and
 connection string for every rehearsal:
 
 ```sh
-supabase branches create --project-ref "$PRODUCTION_REF" --with-data --persistent territory-ledger-rehearsal
+supabase branches create --remote="$PRODUCTION_REF" --with-data --persistent territory-ledger-rehearsal
 # Copy the new ref and its database connection string into your secret manager
 # as STAGING_REF and STAGING_DB_URL. Do not echo either value.
 ```
@@ -77,7 +82,7 @@ parity checks alone. No database is contacted by these commands.
 ## 4. Supabase CLI linking (explicit ref only)
 
 ```sh
-supabase --version   # >= 2.81.3 is required for `db advisors`; 2.117.0 is known good
+supabase --version   # >= 3.2.0; v3 uses --remote for every hosted database command
 supabase link --project-ref "$STAGING_REF"
 ```
 
@@ -89,9 +94,9 @@ history and process listings. Confirm the linked ref printed by the CLI matches
 ## 5. Migration list and dry checks
 
 ```sh
-supabase migration list --linked
-supabase db diff --linked --schema public
-supabase db push --linked --skip-vault --dry-run
+supabase migration list --remote
+supabase db diff --remote --schema public
+supabase db push --remote --skip-vault --dry-run
 ```
 
 `-f/--file` is deliberately not used with `db diff`: it would create a new
@@ -156,13 +161,14 @@ replay.
 ## 8. db push and advisors (staging first)
 
 ```sh
-supabase db push --linked --skip-vault --dry-run
-supabase db push --linked --skip-vault
-supabase db advisors --linked --type all --level warn --fail-on error
-supabase db lint --linked --fail-on error
+supabase db push --remote --skip-vault --dry-run
+supabase db push --remote --skip-vault
+supabase db advisors --remote --type all --level warn --fail-on error
+supabase db lint --remote --fail-on error
 ```
 
-Do not add `--yes`: the apply step requires a human confirmation. Advisors and
+Do not add `--yes`: CLI v3 prompts before changing a hosted project and defaults
+to No, so the apply step still requires a human confirmation. Advisors and
 lint must be clean (or every finding explicitly accepted in the ticket) before
 the staging sign-off.
 
@@ -181,11 +187,11 @@ printf '%s' "$STAGING_DB_URL" | npm run migration:verify -- \
 Manual spot checks using the CLI (no secrets in the SQL):
 
 ```sh
-supabase db query --linked "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version"
-supabase db query --linked "SELECT conname, convalidated FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND (conname LIKE '%credit%' OR conname LIKE 'bookings_%') ORDER BY conname"
-supabase db query --linked "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' ORDER BY relname"
-supabase db query --linked "SELECT count(*) AS events FROM public.booking_events"
-supabase db query --linked "SELECT count(*) AS replay_records FROM public.api_idempotency"
+supabase db query --remote --read-only "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version"
+supabase db query --remote --read-only "SELECT conname, convalidated FROM pg_constraint WHERE connamespace = 'public'::regnamespace AND (conname LIKE '%credit%' OR conname LIKE 'bookings_%') ORDER BY conname"
+supabase db query --remote --read-only "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relkind = 'r' ORDER BY relname"
+supabase db query --remote --read-only "SELECT count(*) AS events FROM public.booking_events"
+supabase db query --remote --read-only "SELECT count(*) AS replay_records FROM public.api_idempotency"
 ```
 
 `NOT VALID` is expected in this phase and is reported as deferred validation.

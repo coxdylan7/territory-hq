@@ -35,11 +35,11 @@ test('deployment runbook covers every required operational topic', () => {
 test('runbook documents exact explicit commands and confirmation gates', () => {
   for (const command of [
     'supabase link --project-ref "$STAGING_REF"',
-    'supabase migration list --linked',
-    'supabase db push --linked --skip-vault --dry-run',
-    'supabase db push --linked --skip-vault',
-    'supabase db advisors --linked --type all --level warn --fail-on error',
-    'supabase db lint --linked --fail-on error',
+    'supabase migration list --remote',
+    'supabase db push --remote --skip-vault --dry-run',
+    'supabase db push --remote --skip-vault',
+    'supabase db advisors --remote --type all --level warn --fail-on error',
+    'supabase db lint --remote --fail-on error',
     'npm run verify',
     'npm run migration:preflight',
     'npm run migration:verify',

@@ -115,7 +115,7 @@ CORS is split by credential type:
 
    ```sh
    supabase link --project-ref YOUR_PROJECT_REF
-   supabase db push
+   supabase db push --remote
    ```
 
    The security migration is
