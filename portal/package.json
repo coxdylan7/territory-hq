@@ -6,6 +6,12 @@
   "engines": {
     "node": ">=20"
   },
+  "dependencies": {
+    "@netlify/aws-lambda-compat": "^2.0.4",
+    "express": "^5.1.0",
+    "postgres": "^3.4.5",
+    "serverless-http": "^4.0.0"
+  },
   "scripts": {
     "build": "npm --prefix web install --no-audit --no-fund && npm --prefix web run build",
     "start": "node api/src/server.js",

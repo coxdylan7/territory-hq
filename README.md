@@ -166,17 +166,20 @@ accepted. Exact owner ids come from your `users.id` values.
 ## 3. Deploy
 
 Netlify is the authoritative web hosting target for
-`github.com/coxdylan7/territory-hq`. Use two independent Netlify sites from
-this repository. The full, exact UI settings, environment gates, smoke tests,
-rollback steps, and runtime blocker are in
-`docs/netlify-deployment.md`.
+`github.com/coxdylan7/territory-hq`. Both sites are Git-connected to that
+repository and deploy from `main`. There is no separate package directory
+requirement: leave Package directory unset on both sites. The full, exact Git
+CI settings, environment gates, smoke tests, rollback steps, and runtime
+blocker are in `docs/netlify-deployment.md`.
 
-| Site | Package directory | Base directory | Config | Publish | Functions |
-|------|-------------------|----------------|--------|---------|-----------|
-| HQ | repository root (leave blank) | repository root (leave unset) | `netlify.toml` | `web/dist` | `netlify/functions` |
-| Portal | `portal` | repository root (leave unset) | `portal/netlify.toml` | `portal/web/dist` | `portal/netlify/functions` |
+| Site | Base directory | Config | Publish | Functions |
+|------|----------------|--------|---------|-----------|
+| HQ | repository root (leave unset) | `netlify.toml` | `web/dist` | `netlify/functions` |
+| Portal | `portal` | `portal/netlify.toml` | `web/dist` | `netlify/functions` |
 
-Both sites use Node `22.12.0`. Each `/api` and `/api/*` request is rewritten
+The Portal paths above are relative to its `portal` base: on disk they are
+`portal/web/dist` and `portal/netlify/functions`. Both sites use Node
+`22.12.0`. Each `/api` and `/api/*` request is rewritten
 before the SPA fallback to a Netlify Function that calls the existing Express
 app; the browser never talks directly to Supabase. Set `DATABASE_URL`,
 `SKIP_SCHEMA=1`, `PUBLIC_ORIGIN`, `FIRST_PARTY_ORIGINS`, and `TRUST_PROXY=1` as

@@ -30,27 +30,48 @@ responses. `SKIP_SCHEMA=1` prevents boot-time DDL in the function runtime.
 
 ## Netlify UI site settings
 
-Connect each site to `coxdylan7/territory-hq` and use the following settings.
-The package directory is a UI setting and cannot be set in `netlify.toml`.
-Leave **Base directory unset** on both sites so TOML paths resolve from the
-repository root.
+Both sites are Git-connected to `coxdylan7/territory-hq` and deploy from
+`main`. These are the exact Git CI settings; the base directory is a site
+setting that cannot be set in `netlify.toml`.
 
 | Setting | HQ site | Portal site |
 |---|---|---|
 | Repository | `coxdylan7/territory-hq` | `coxdylan7/territory-hq` |
 | Production branch | `main` | `main` |
-| Base directory | unset (repository root) | unset (repository root) |
-| Package directory | unset (repository root) | `portal` |
+| Base directory | unset (repository root) | `portal` |
+| Package directory | not required (leave unset) | not required (leave unset) |
 | Config file discovered | `netlify.toml` | `portal/netlify.toml` |
-| Build command | `npm --prefix api install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund && npm --prefix web run build` | `npm --prefix portal/api install --no-audit --no-fund && npm --prefix portal/web install --no-audit --no-fund && npm --prefix portal/web run build` |
-| Publish directory | `web/dist` | `portal/web/dist` |
-| Functions directory | `netlify/functions` | `portal/netlify/functions` |
+| Build command | `npm --prefix api install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund && npm --prefix web run build` | `npm --prefix api install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund && npm --prefix web run build` |
+| Publish directory | `web/dist` | `web/dist` |
+| Functions directory | `netlify/functions` | `netlify/functions` |
 | Node version | `NODE_VERSION = "22.12.0"` | `NODE_VERSION = "22.12.0"` |
 
-Netlify installs root dependencies first, which supplies the adapter packages.
-The build command then installs the API and web dependencies for that site.
-Do not change the publish directory to the repository root: function source
-must remain outside the published static assets.
+Netlify searches the base directory before the repository root for
+`netlify.toml`, so Base directory `portal` discovers `portal/netlify.toml`.
+Every path in that file resolves from the base: `web/dist` is
+`portal/web/dist` on disk and `netlify/functions` is `portal/netlify/functions`
+on disk. There is no separate package-directory requirement; leave it unset on
+both sites rather than relying on a UI setting that CLI/API automation cannot
+set reliably. Netlify installs dependencies at the base, then the build command
+installs each site's `api/` and `web/` dependencies and builds its web app. Do
+not change the publish directory to the base root: function source must remain
+outside the published static assets.
+
+### Shared function code from the Portal base
+
+The Portal function imports the root-level adapter and shared API helpers via
+static relative imports outside the base. This is supported by Netlify function
+bundling: static imports are followed, and Netlify's esbuild base-path logic
+explicitly accounts for `repositoryRoot`
+([zip-it-and-ship-it #754](https://github.com/netlify/zip-it-and-ship-it/commit/8b2f8ea951696131b48fa7e624e89c594189ebae)).
+The adapter and security-header logic are therefore not duplicated inside
+`portal/`. Netlify externalizes bare modules from the bundled function, so every
+module in the function graph must be installed at the site base. Both
+`package.json` at the repository root and `portal/package.json` therefore
+declare `serverless-http`, `@netlify/aws-lambda-compat`, `express`, and
+`postgres` at the same versions used by the API packages; the build command
+installs each site's `api/` and `web/` packages under `api/` and `web/`. Shared
+code stays under the single tested implementation.
 
 ## Environment gates
 
@@ -86,8 +107,9 @@ echoed.
 2. **Deploy HQ first.** Trigger a deploy of the HQ site from `main`; confirm
    the build uses `web/dist` and that `hq-api.mjs` is bundled. Do not switch
    production DNS/traffic yet.
-3. **Deploy Portal second.** Trigger a deploy of the Portal site from `main`;
-   confirm `portal/web/dist` and `portal-api.mjs` are bundled. Do not switch
+3. **Deploy Portal second.** Trigger a deploy of the Portal site from `main`
+   with Base directory `portal`; confirm the base-relative `web/dist`
+   (`portal/web/dist` on disk) and `portal-api.mjs` are bundled. Do not switch
    production DNS/traffic yet.
 4. Run every smoke test below against each deploy-specific Netlify URL. Check
    the function logs for secrets or stack traces; none should appear.

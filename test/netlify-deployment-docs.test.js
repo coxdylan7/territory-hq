@@ -21,29 +21,55 @@ test('README points to the authoritative two-site Netlify runbook', () => {
   assert.match(combined, /non-authoritative/i);
 });
 
-test('deployment docs give exact Netlify UI settings for both monorepo sites', () => {
-  for (const fragment of [
-    'Package directory',
-    'Base directory',
-    'repository root',
-    '`portal`',
-    '`netlify.toml`',
-    '`portal/netlify.toml`',
-    '`web/dist`',
-    '`portal/web/dist`',
-    '`netlify/functions`',
-    '`portal/netlify/functions`',
-    'NODE_VERSION = "22.12.0"',
-  ]) {
-    assert.ok(docs.includes(fragment), `Netlify docs are missing: ${fragment}`);
-  }
+test('deployment docs give exact Git-connected Netlify settings for both sites', () => {
+  const table = docs.match(/\| Setting \| HQ site \| Portal site \|[\s\S]*?(?=\n\n)/);
+  assert.ok(table, 'docs must contain the exact two-site settings table');
+  const rows = table[0].split('\n');
+  const row = (label) => {
+    const found = rows.find((line) => line.startsWith(`| ${label} |`));
+    assert.ok(found, `docs settings table is missing ${label}`);
+    return found;
+  };
 
-  assert.match(docs, /npm --prefix api install --no-audit --no-fund/);
-  assert.match(docs, /npm --prefix web install --no-audit --no-fund/);
-  assert.match(docs, /npm --prefix web run build/);
-  assert.match(docs, /npm --prefix portal\/api install --no-audit --no-fund/);
-  assert.match(docs, /npm --prefix portal\/web install --no-audit --no-fund/);
-  assert.match(docs, /npm --prefix portal\/web run build/);
+  assert.equal(row('Repository'), '| Repository | `coxdylan7/territory-hq` | `coxdylan7/territory-hq` |');
+  assert.equal(row('Production branch'), '| Production branch | `main` | `main` |');
+  assert.equal(row('Base directory'), '| Base directory | unset (repository root) | `portal` |');
+  assert.equal(row('Package directory'), '| Package directory | not required (leave unset) | not required (leave unset) |');
+  assert.equal(row('Config file discovered'), '| Config file discovered | `netlify.toml` | `portal/netlify.toml` |');
+  assert.equal(row('Publish directory'), '| Publish directory | `web/dist` | `web/dist` |');
+  assert.equal(row('Functions directory'), '| Functions directory | `netlify/functions` | `netlify/functions` |');
+  assert.equal(row('Node version'), '| Node version | `NODE_VERSION = "22.12.0"` | `NODE_VERSION = "22.12.0"` |');
+
+  const build = row('Build command');
+  const commands = build.split('|').map((cell) => cell.trim());
+  assert.equal(commands[2], '`npm --prefix api install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund && npm --prefix web run build`');
+  assert.equal(commands[3], commands[2], 'Portal build command is relative to its base, not repository-root-relative');
+
+  assert.match(docs, /repository root/i);
+  assert.doesNotMatch(docs, /Set Package directory to ["'`]portal["'`]/i, 'no separate package-directory requirement');
+  assert.match(docs, /base directory/i);
+  assert.match(docs, /`portal\/netlify\.toml`/);
+});
+
+test('README mirrors the exact Git-connected base and paths', () => {
+  assert.match(readme, /github\.com\/coxdylan7\/territory-hq/);
+  const table = readme.match(/\| Site \| Base directory \| Config \| Publish \| Functions \|[\s\S]*?(?=\n\n)/);
+  assert.ok(table, 'README must contain the two-site settings table');
+  assert.match(table[0], /\| HQ \| repository root \(leave unset\) \| `netlify\.toml` \| `web\/dist` \| `netlify\/functions` \|/);
+  assert.match(table[0], /\| Portal \| `portal` \| `portal\/netlify\.toml` \| `web\/dist` \| `netlify\/functions` \|/);
+  assert.doesNotMatch(table[0], /\| Portal \|[^\n]*`portal\/web\/dist`/);
+  assert.doesNotMatch(table[0], /\| Portal \|[^\n]*`portal\/netlify\/functions`/);
+  assert.match(combined, /no separate package directory/i);
+});
+
+test('docs confirm shared root function code is bundled from the Portal base', () => {
+  assert.match(docs, /esbuild/i);
+  assert.match(docs, /repositoryRoot/i);
+  assert.match(docs, /static relative import/i);
+  assert.match(docs, /serverless-http/);
+  assert.match(docs, /@netlify\/aws-lambda-compat/);
+  assert.match(docs, /postgres/);
+  assert.match(docs, /not duplicated/i);
 });
 
 test('deployment docs list all function environment gates without values', () => {

@@ -23,3 +23,5 @@ supabase/.status
 # os / editor
 .DS_Store
 *.log
+# Local Netlify folder
+.netlify

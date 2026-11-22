@@ -1,17 +1,17 @@
 # Territory Portal — Netlify site.
-# Set Package directory to "portal" in the Netlify UI (cannot be set in TOML).
-# Base remains the repository root, so all paths here are base-relative.
+# Git CI Base directory is "portal"; no separate directory setting is required.
+# All paths below are relative to that base, where Netlify runs the build.
 "$schema" = "https://open-api.netlify.com/netlify.schema.json"
 
 [build]
-  command = "npm --prefix portal/api install --no-audit --no-fund && npm --prefix portal/web install --no-audit --no-fund && npm --prefix portal/web run build"
-  publish = "portal/web/dist"
+  command = "npm --prefix api install --no-audit --no-fund && npm --prefix web install --no-audit --no-fund && npm --prefix web run build"
+  publish = "web/dist"
 
 [build.environment]
   NODE_VERSION = "22.12.0"
 
 [functions]
-  directory = "portal/netlify/functions"
+  directory = "netlify/functions"
 
 [[redirects]]
   from = "/api"
