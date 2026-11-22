@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store';
 import { api } from '../api';
-import { creditEstimate, todayStr } from '../utils';
 import { Section, Stat, Empty } from '../components';
 
 const STATUS_PILL = { requested: 'tracking', approved: 'active', confirmed: 'active', declined: 'inactive', cancelled: 'prospect', completed: 'activation' };
@@ -26,22 +25,21 @@ export default function Bookings() {
     } catch (e) { st.showToast('Reload failed: ' + e.message); }
   }
 
-  const today = todayStr();
   const plus14 = (() => { const d = new Date(); d.setDate(d.getDate() + 14); return d.toISOString().slice(0, 10); })();
   const rows = [...st.bookings].sort((a, b) => (a.date + (a.startTime || '')).localeCompare(b.date + (b.startTime || '')));
-  const norm = rows.map((b) => ((b.status === 'approved' || b.status === 'confirmed') && b.date < today ? { ...b, status: 'completed' } : b));
-  const requests = norm.filter((b) => b.status === 'requested');
-  const upcoming = norm.filter((b) => (b.status === 'approved' || b.status === 'confirmed') && b.date >= today && b.date <= plus14);
-  const archive = norm.filter((b) => ['declined', 'cancelled', 'completed'].includes(b.status));
+  const requests = rows.filter((b) => b.status === 'requested');
+  const upcoming = rows.filter((b) => (b.status === 'approved' || b.status === 'confirmed') && b.date <= plus14);
+  const archive = rows.filter((b) => ['declined', 'cancelled', 'completed'].includes(b.status));
   const ambassadors = st.portalUsers.filter((u) => u.role === 'brand_ambassador');
   const storeUsers = st.portalUsers.filter((u) => u.role !== 'brand_ambassador');
-
-  const typeById = (id) => st.eventTypes.find((t) => t.id === id) || null;
 
   async function doApprove(bk) {
     setApproveBk(null);
     try {
-      await api.put('/api/bookings/' + bk.id + '/approve', { ambassadorUserId: approveBk.ambassadorUserId || null });
+      await api.action('put', '/api/bookings/' + bk.id + '/approve', {
+        ambassadorUserId: bk.ambassadorUserId || null,
+        notes: bk.notes || '',
+      });
       st.showToast('Approved ' + bk.eventTypeName + ' for ' + bk.accountName + '.');
       await reload();
     } catch (e) { st.showToast('Approve failed: ' + e.message); }
@@ -50,7 +48,7 @@ export default function Bookings() {
   async function doDecline(bk) {
     setDeclineBk(null);
     try {
-      await api.put('/api/bookings/' + bk.id + '/decline', { notes: declineBk.notes || '' });
+      await api.action('put', '/api/bookings/' + bk.id + '/decline', { notes: bk.notes || '' });
       st.showToast('Declined ' + bk.eventTypeName + ' for ' + bk.accountName + '.');
       await reload();
     } catch (e) { st.showToast('Decline failed: ' + e.message); }
@@ -59,7 +57,7 @@ export default function Bookings() {
   async function doCancel(bk) {
     if (!confirm('Cancel this booking? Credits already charged will be refunded.')) return;
     try {
-      await api.put('/api/bookings/' + bk.id + '/cancel', {});
+      await api.action('put', '/api/bookings/' + bk.id + '/cancel', {});
       st.showToast('Booking cancelled. Credits refunded.');
       await reload();
     } catch (e) { st.showToast('Cancel failed: ' + e.message); }
@@ -79,7 +77,7 @@ export default function Bookings() {
   }
 
   async function assignAmbassador(bk, ambassadorUserId) {
-    try { await api.put('/api/bookings/' + bk.id + '/assign', { ambassadorUserId: ambassadorUserId || null }); await reload(); }
+    try { await api.action('put', '/api/bookings/' + bk.id + '/assign', { ambassadorUserId: ambassadorUserId || null }); await reload(); }
     catch (e) { st.showToast('Reassign failed: ' + e.message); }
   }
 
@@ -134,7 +132,7 @@ export default function Bookings() {
                 <div>
                   <b>{b.eventTypeName}</b> <span className="muted">· {b.accountName}{b.licenseNumber ? ` (${b.licenseNumber})` : ''}</span>
                   <div className="muted" style={{ marginTop: 2 }}>
-                    {b.date}{b.startTime ? ` @ ${b.startTime}` : ''} · {Number(b.durationHours) || 0}h {typeById(b.eventTypeId) ? `· ~${creditEstimate(typeById(b.eventTypeId), b.durationHours)} cr` : ''}
+                    {b.date}{b.startTime ? ` @ ${b.startTime}` : ''} · {Number(b.durationHours) || 0}h {b.quotedCredits != null ? `· ${b.quotedCredits} cr quoted` : ''}
                     {b.notesClient ? ` · "${b.notesClient}"` : ''}
                   </div>
                 </div>
@@ -290,7 +288,7 @@ export default function Bookings() {
         </>
       )}
 
-      {approveBk && <ApproveModal bk={approveBk} setBk={setApproveBk} onApprove={doApprove} ambassadors={ambassadors} type={typeById(approveBk.eventTypeId)} />}
+      {approveBk && <ApproveModal bk={approveBk} setBk={setApproveBk} onApprove={doApprove} ambassadors={ambassadors} />}
       {declineBk && <DeclineModal bk={declineBk} setBk={setDeclineBk} onDecline={doDecline} />}
     </>
   );
@@ -326,10 +324,10 @@ function PricingRow({ et, onSaved, onToast }) {
   );
 }
 
-function ApproveModal({ bk, setBk, onApprove, ambassadors, type }) {
+function ApproveModal({ bk, setBk, onApprove, ambassadors }) {
   const [amb, setAmb] = useState('');
   const [notes, setNotes] = useState('');
-  const cost = creditEstimate(type, bk.durationHours);
+  const cost = bk.quotedCredits;
   return (
     <div className="modalBg" onClick={(e) => { if (e.target === e.currentTarget) setBk(null); }}>
       <div className="modal card">

@@ -1,84 +1,270 @@
-# Territory HQ — Netlify SaaS Edition
+# Territory HQ — Supabase Edition
 
-Multi-user version: registration + login, per-member data isolation, admin panel
-for approving members and managing subscription dates. Built for marketing to
-NY cannabis sales reps.
+Multi-user territory management app with an Express API, a Vite/React web app, and
+a store/ambassador portal. Data lives in Supabase Postgres. The API connects with
+a server-side `DATABASE_URL`; browsers do not talk to the Supabase Data API.
 
 ## What's inside
+
 ```
-public/index.html            the app (login/signup + full console)
-netlify/functions/api.js     the entire backend (auth, data, admin, cross-app API)
-netlify.toml                 routes /api/* to the function
+api/src/server.js                  Express REST API (auth, data, admin, cross-app reads)
+api/src/cross-app-auth.js          token -> owner_user_id resolution (server-side secret)
+api/src/cross-app-queries.js       owner-scoped SQL builders for cross-app reads
+api/src/cross-app-handlers.js      cross-app request handlers
+api/src/session-cookie.js          HttpOnly first-party session cookie helpers
+api/src/session-auth.js            cookie session lookup + explicit legacy bearer opt-in
+api/src/csrf.js                    Origin validation for cookie-authenticated mutations
+api/src/security-headers.js        CSP and supporting response headers
+api/test/                          Node built-in tests for both security phases
+web/src/                           main React web app
+portal/api/src/server.js           store/ambassador portal API
+portal/web/src/                    portal React app
+supabase/migrations/               imperative Postgres migrations
 ```
 
-## How membership works
-- Anyone can **create an account** → status starts as `pending`
-- The **first account ever created is automatically the admin** (that's you —
-  sign up first!). You can also set `ADMIN_EMAIL` so your email always gets admin.
-- Pending members see a "awaiting approval" screen until you approve them
-- The **Admin tab** (visible only to admins) lists every member: Approve,
-  Suspend, set the **Subscription until** date, promote to admin
-- When a member's subscription date passes, they see "Subscription expired"
-  and lose access until you extend it
-- Payments are **managed manually by you** for now (you collect payment however
-  you like, then set their date). Stripe checkout can be added as a next step —
-  it needs your Stripe account/keys.
+## Security model (first security phase)
 
-## 1. Create the database (Turso — free)
-Netlify has no built-in SQL database, so this uses Turso (SQLite-compatible):
-1. Sign up at https://turso.tech (free tier: 500 DBs, 9GB — way more than needed)
-2. Create a database (any name, e.g. `territory-hq`)
-3. From the database page copy:
-   - the **URL** (starts with `libsql://...`)
-   - create an **auth token** (Database → Tokens → Create token)
+Supabase grants and Row Level Security are separate controls, and both are used:
 
-Tables are created automatically on first request — no SQL to run.
+- All 15 known application tables in `public` have RLS enabled and forced, both
+  in migrations and when `ensureSchema()` creates tables at runtime.
+- `anon` and `authenticated` have **all privileges revoked** on those 15 tables.
+  Unrelated public objects, including extension functions, are not touched.
+  They cannot reach application data through the Data API (PostgREST/GraphQL).
+- Default privileges are also revoked for future public tables, sequences, and
+  functions created by the `postgres` role, for all Data API roles. New objects
+  stay private until an explicit grant is added in a reviewed migration.
+- The API uses `DATABASE_URL` over a direct/pooler Postgres connection as the
+  `postgres` role. That server-side path is intentionally preserved; do not put
+  `DATABASE_URL` in a browser bundle or client-side environment variable.
+- Existing `service_role` grants are left alone. Future grants to it must be
+  explicit. It is a secret server-only role and is not used by the browser apps.
+- If you later need Data API access for any object, add a narrow `GRANT` **and**
+  an owner-aware RLS policy in the same migration. Do not re-enable blanket
+  `anon`/`authenticated` access.
 
-## 2. Deploy to Netlify
-Option A — drag & drop (no CLI, works on phone):
-1. app.netlify.com → **Add new site → Deploy manually**
-2. Drag the whole project folder (the one containing `public`, `netlify`, `netlify.toml`)
-3. Deploy
+Cross-app reads are owner-scoped:
 
-Option B — connect a GitHub repo with these files; Netlify auto-deploys on push.
+- `CROSS_APP_TOKENS_JSON` is a server-side secret mapping opaque bearer tokens to
+  exactly one `owner_user_id` each.
+- The owner id is resolved from the presented token only. Query/body parameters
+  such as `ownerUserId` are ignored.
+- Missing or malformed configuration denies all cross-app requests.
+- Legacy `READ_TOKEN` is **not supported**. Setting it has no effect; there is no
+  insecure compatibility opt-in in this phase.
 
-## 3. Set environment variables
-Site → **Site configuration → Environment variables → Add a variable**:
+## Browser sessions, CSRF and CSP (second security phase)
 
-| Name | Value |
-|------|-------|
-| `TURSO_DATABASE_URL` | the `libsql://...` URL from Turso |
-| `TURSO_AUTH_TOKEN` | the token from Turso |
-| `ANTHROPIC_API_KEY` | from console.anthropic.com (for AI message drafts) |
-| `READ_TOKEN` | long random string — for your other apps to read credits/messages |
-| `ALLOWED_ORIGINS` | comma-separated domains of your other apps (optional) |
-| `ADMIN_EMAIL` | your email — guarantees your signup gets admin (optional) |
+First-party HQ and portal sessions are HttpOnly cookies (`thq_session` and
+`tp_session`), not browser-readable tokens:
 
-Then **Deploys → Trigger deploy → Deploy site** so the variables take effect.
+- Set on HQ signup/login and portal login/invite activation; cleared on logout.
+- Flags: `Path=/`, `HttpOnly`, `SameSite=Lax`, 30-day `Max-Age`. `Secure` is set
+  when `NODE_ENV=production` or `COOKIE_SECURE=1`.
+- Auth JSON returns the user only; no session token is written to
+  `localStorage`, `sessionStorage`, or JSON. Every first-party `fetch` uses
+  `credentials: 'include'`.
+- `ALLOW_LEGACY_BEARER_SESSION=1` temporarily allows an Authorization bearer
+  token **for session lookup only**. It never writes that token back to browser
+  storage. Owner-scoped cross-app bearer tokens are unaffected and remain the
+  only credential accepted by the cross-app GET routes.
+
+Cookie-authenticated state changes are protected by fail-closed Origin/fetch
+metadata validation:
+
+- `POST`, `PUT`, `PATCH` and `DELETE` carrying `thq_session` or `tp_session`
+  reject missing, empty and `null` `Origin`, any cross-origin value, and
+  `Sec-Fetch-Site: cross-site`.
+- An allowed `Origin` must exactly match `PUBLIC_ORIGIN` or
+  `FIRST_PARTY_ORIGINS`; when neither is configured, it must exactly match the
+  request origin derived from Express `req.protocol` and `Host`. Wildcards,
+  suffixes, paths and userinfo never match.
+- A request without `Origin` is accepted only when it carries no session cookie
+  and no browser `Sec-Fetch-Site` header (a non-browser client), or when the
+  explicitly tested `ALLOW_LEGACY_BEARER_SESSION=1` bearer path is enabled.
+- `ALLOWED_ORIGINS` is not reused for CSRF because it configures cross-app
+  bearer GET consumers. A rejected mutation returns HTTP 403 with
+  `{"error":"cross-origin request blocked"}`.
+- Raw `x-forwarded-*` headers are ignored. `TRUST_PROXY` must be set explicitly
+  before Express uses them to derive `req.protocol`.
+
+Content-Security-Policy and supporting headers are emitted by both Express
+apps and mirrored as a meta CSP in the Vite HTML shells:
+
+- `default-src 'self'`, no inline/eval scripts, `object-src 'none'`,
+  `frame-ancestors 'none'`, `base-uri 'self'`, `form-action 'self'`.
+- `'unsafe-inline'` remains in `style-src` because existing React components
+  use inline `style` props. Leaflet tiles, Google Maps/API assets, Google
+  Fonts, NY Open Data, Nominatim and OSRM are the only external sources listed.
+- The printable report is escaped by a tested helper, written into exactly one
+  writable `about:blank` window, isolated by clearing `opener` immediately, and
+  printed by the opener so no inline script is needed in the generated document.
+
+CORS is split by credential type:
+
+- Exact `PUBLIC_ORIGIN`/`FIRST_PARTY_ORIGINS` values receive reflected
+  `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials: true`, and
+  `GET, POST, PUT, PATCH, DELETE, OPTIONS`.
+- Exact `ALLOWED_ORIGINS` values receive cross-app bearer CORS with
+  `GET, OPTIONS` only and no credentials. No wildcard is ever reflected.
+
+## 1. Prepare Supabase
+
+1. Create a Supabase project.
+2. Apply the migrations from this repository, for example:
+
+   ```sh
+   supabase link --project-ref YOUR_PROJECT_REF
+   supabase db push
+   ```
+
+   The security migration is
+   `supabase/migrations/20261122002427_secure_public_data_api.sql`. It is
+   idempotent and can be re-run safely.
+3. In Dashboard → Project Settings → Database → Connection string, copy the
+   transaction-pooler connection string. Use it only as the server-side
+   `DATABASE_URL`.
+4. In Data API settings, leave “Automatically expose new tables” disabled. The
+   migration's revoked default privileges are a second layer of protection.
+
+Do not paste connection strings, tokens, or mapping JSON into issues, chat, or
+client-side code.
+
+## 2. Configure server secrets
+
+Copy `api/.env.example` to `api/.env` for local development, or set the same
+variables in your host's environment/dashboard (e.g. Render):
+
+| Name | Purpose |
+|------|---------|
+| `DATABASE_URL` | Required. Supabase Postgres transaction-pooler connection string. Server-side secret. |
+| `CROSS_APP_TOKENS_JSON` | Optional. JSON map of opaque token → one `owner_user_id`. Empty means cross-app reads are denied. Server-side secret. |
+| `PUBLIC_ORIGIN` | Canonical exact browser origin (`scheme://host[:port]`). Used for credentialed CORS and CSRF; no wildcard or path. |
+| `ALLOWED_ORIGINS` | Optional exact origins for cross-app bearer GET CORS only. Empty disallows cross-origin reads; `*` is ignored. Not used for CSRF or cookies. |
+| `FIRST_PARTY_ORIGINS` | Additional exact browser origins for credentialed CORS and cookie-authenticated mutations. Empty means `PUBLIC_ORIGIN`/same-origin only. |
+| `TRUST_PROXY` | Optional explicit Express trust-proxy hop count or proxy address list. Empty means `x-forwarded-*` headers are ignored. |
+| `COOKIE_SECURE` | Optional `1`/`true` to force the `Secure` cookie flag outside `NODE_ENV=production`. |
+| `ALLOW_LEGACY_BEARER_SESSION=1` | Temporary session-lookup compatibility for old bearer clients. Remove after migration; it never writes tokens to browser storage. |
+| `ADMIN_EMAIL` | Optional email that should receive admin role on signup. |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | Optional SMS sending. |
+| `ANTHROPIC_API_KEY` | Optional AI message drafting. |
+| `SKIP_SCHEMA` | Optional `1` to skip boot-time `CREATE TABLE IF NOT EXISTS` setup. |
+| `PORT` | HTTP port (default `8080` for the main API, `8081` for the portal). |
+
+Example mapping shape (replace every placeholder; never commit real values):
+
+```json
+{"REPLACE_WITH_TOKEN_A":"owner-id-a","REPLACE_WITH_TOKEN_B":"owner-id-b"}
+```
+
+Use a strong random value for each opaque token; `openssl rand -hex 32` is one
+option. Tokens are opaque strings with no fixed format — any non-empty string is
+accepted. Exact owner ids come from your `users.id` values.
+
+## 3. Deploy
+
+The repo includes a `Dockerfile` for the main API, a `portal/Dockerfile` for the
+portal API, and `render.yaml` as a starting blueprint. Set the environment
+variables above in the hosting provider; do not bake them into the image.
+
+Static-only hosting can publish `web/dist` or `portal/web/dist`, but it requires
+a separately deployed, **external compatible Express API** for `/api/*`; no
+serverless backend is bundled with the Vite builds. Configure exact
+`PUBLIC_ORIGIN` and `FIRST_PARTY_ORIGINS` values on both the API and the client
+so HttpOnly cookies, credentialed CORS and CSRF checks work, and set
+`ALLOWED_ORIGINS` for owner-scoped cross-app bearer reads. Reverse-proxying
+`/api/*` to the Express API on the same origin is the simplest setup; otherwise
+every origin must be listed exactly. Static hosts that ignore
+`web/public/_headers` or `portal/web/public/_headers`, or that cannot serve an
+external Express API with this configuration, are unsupported.
+
+Build and start locally:
+
+```sh
+npm run build          # builds web/
+npm --prefix portal run build
+npm run dev:api
+npm --prefix portal start
+```
 
 ## 4. First run
-1. Open your `*.netlify.app` URL → **Create account** → you're the admin (first user)
-2. App Settings tab → paste your Google Maps key → Save
-   (restrict the key to your `*.netlify.app` domain in Google Cloud Console)
-3. Share the URL with reps → they sign up → you approve them in the **Admin** tab
-   and set their subscription date
 
-## 5. Cross-app API (unchanged pattern)
-Your other apps read shared data with the READ_TOKEN:
+1. Open the web app → **Create account** → the first account becomes admin (or
+   use `ADMIN_EMAIL`).
+2. App Settings → paste a domain-restricted Google Maps key → Save.
+3. Approve members in the Admin tab and set subscription dates.
+4. Create store/ambassador invitations from the portal screens.
+
+## 5. Cross-app API
+
+Each consumer gets its own opaque token mapped to its own owner id. The owner
+scope is applied in SQL, not by trusting the caller.
+
 ```
-GET https://your-site.netlify.app/api/credits/balances?license=OCM-XXXX
-GET https://your-site.netlify.app/api/messages/shared?license=OCM-XXXX
-Header: Authorization: Bearer <READ_TOKEN>
+GET /api/credits/balances?license=OCM-XXXX
+GET /api/messages/shared?license=OCM-XXXX
+Authorization: Bearer <OWNER_SCOPED_TOKEN>
 ```
 
-## Honest notes / next steps
-- **Payments**: this version is "admin-approved subscriptions" — you handle money
-  outside the app and set dates. Adding Stripe (self-serve checkout, auto-renewal,
-  webhooks that extend `subExpires` automatically) is the logical next build and
-  needs your Stripe keys.
-- **Password resets** aren't built yet — as admin you can't reset passwords from
-  the UI; that's another good next step (email-based reset needs an email service).
-- Cross-app endpoints currently return data across ALL members (matched by license
-  number). If reps should be siloed from each other's credits/messages in
-  cross-app reads too, say so and I'll scope those per-member.
+Responses contain only rows where `credits.user_id` / `messages.user_id` equals
+the `owner_user_id` configured for that token. The `license` filter is optional.
+Unknown tokens, legacy `READ_TOKEN` values, and malformed configuration return
+`401 unauthorized`.
+
+## 6. Tests and verification
+
+```sh
+npm --prefix api test          # API security tests; no database required
+npm --prefix portal/api test   # portal session regression tests
+npm --prefix web test          # report escaping and print-window tests
+npm --prefix web run build
+npm --prefix portal/web run build
+git diff --check
+git status --short
+```
+
+The tests cover default denial, owner resolution, fail-closed configuration,
+owner-required SQL helpers, report HTML escaping, cookie flags/set-clear,
+cookie authentication, explicit legacy bearer opt-in, HTTP-level CSRF rejection,
+owner-scoped cross-app GET behavior, no token storage/JSON exposure, CSP policy,
+and documentation. They do not connect to Supabase. Database behavior should be
+verified separately in a disposable local/branch database with
+`supabase db reset` and `supabase test db`.
+
+## Honest notes / limitations
+
+- This phase locks down Data API access with grants + forced RLS, but does not
+  add per-row Supabase Auth policies because this app authenticates in Express
+  with its own session tables. All data access should continue through the API.
+- The migration uses the `postgres` role assumption from the existing sample
+  connection string. If your `DATABASE_URL` uses a different owner role without
+  `BYPASSRLS`, verify access in a non-production branch before deploying.
+- No insecure `READ_TOKEN` compatibility shim is provided. Migrating consumers
+  must be issued owner-scoped tokens.
 - Sessions last 30 days; suspending a member kills their sessions immediately.
+- Password resets and self-serve payments are still not implemented.
+- The meta CSP cannot enforce `frame-ancestors`; that directive works only as an
+  HTTP header. Express deployments receive both `frame-ancestors 'none'` and
+  `X-Frame-Options: DENY` from `securityHeadersMiddleware`. Static Vite hosting is
+  supported only when the host applies the provided `web/public/_headers` or
+  `portal/web/public/_headers` (Vite copies them into `dist`). A static host that
+  ignores these files is unsupported for clickjacking purposes.
+- `style-src 'unsafe-inline'` is a compatibility allowance for existing inline
+  React styles. It is not needed for scripts; `script-src` has no
+  `unsafe-inline`/`unsafe-eval`.
+- The legacy public/index.html retired: its unescaped print export and inline
+  print script are no longer part of any deploy surface. Only the Vite builds
+  in `web/dist` and `portal/web/dist` are published; `/api/*` is served by an
+  external Express API, not by a bundled serverless function.
+- Cookies use `SameSite=Lax`. Production should keep HQ/portal web and API on
+  the same site, or configure exact `PUBLIC_ORIGIN`/`FIRST_PARTY_ORIGINS` for
+  same-site cross-origin apps. True cross-site cookies would additionally need
+  `SameSite=None; Secure`, which is not enabled here.
+- CSRF uses Origin/fetch metadata rather than per-form tokens. Missing Origin is
+  accepted only for non-browser clients with no session cookie and no
+  `Sec-Fetch-Site` header, or for the temporary explicit legacy bearer path.
+- `PUBLIC_ORIGIN`/`FIRST_PARTY_ORIGINS` must be exact configured values.
+  Forwarded headers are ignored unless `TRUST_PROXY` is set to a trusted hop
+  count or proxy address list.
+- `ALLOW_LEGACY_BEARER_SESSION=1` is temporary compatibility only. Plan to
+  remove it after every first-party client uses cookies.

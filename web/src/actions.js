@@ -27,13 +27,23 @@ export async function addCredits(accountId, amount, note) {
   if (!acc) return;
   amount = Number(amount) || 0;
   if (!amount) { st.showToast('Enter a credit amount.'); return; }
-  const date = new Date().toISOString().slice(0, 10);
-  const entry = { id: 'cr' + Date.now(), accountId, accountName: acc.name, licenseNumber: acc.licenseNumber || '', city: acc.city || '', amount, note: note || '', date };
-  await api.post('/api/credits', entry);
-  st.set({ credits: [...st.credits, entry] });
-  st.lastCreditDraft = creditEmail(entry, creditBalance({ ...st, credits: [...st.credits, entry] }, accountId));
+  const payload = {
+    accountId,
+    accountName: acc.name,
+    licenseNumber: acc.licenseNumber || '',
+    city: acc.city || '',
+    amount,
+    note: note || '',
+    date: new Date().toISOString().slice(0, 10),
+  };
+  const result = await api.action('post', '/api/credits', payload);
+  const entry = result.entry;
+  const credits = [...st.credits.filter((c) => c.id !== entry.id), entry];
+  const balance = Number(result.balance);
+  st.set({ credits });
+  st.lastCreditDraft = creditEmail(entry, balance);
   st.set({ lastCreditDraft: st.lastCreditDraft });
-  st.showToast(`Added ${amount} credits to ${acc.name}. New balance: ${creditBalance({ ...st, credits: [...st.credits, entry] }, accountId)}.`);
+  st.showToast(`Added ${entry.amount} credits to ${acc.name}. New balance: ${balance}.`);
 }
 
 export async function setPlanDay(accountId, day, wk) {

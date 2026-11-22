@@ -1,5 +1,5 @@
-# Territory HQ — initial schema
-# Source of truth: api/src/schema.js
+-- Territory HQ — initial schema
+-- Source of truth: api/src/schema.js
 
 -- ============================================
 -- 001  users, sessions

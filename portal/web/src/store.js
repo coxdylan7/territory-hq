@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, getToken, setToken, clearToken } from './api';
+import { api } from './api';
 
 let toastTimer = null;
 let poll = null;
@@ -22,7 +22,7 @@ function stopPolling() {
 }
 
 export const useStore = create((set, get) => ({
-  auth: getToken() ? 'boot' : 'none',
+  auth: 'boot',
   user: null,
   balance: null,
   eventTypes: [],
@@ -45,7 +45,6 @@ export const useStore = create((set, get) => ({
       await get().refresh(me);
       startPolling();
     } catch (e) {
-      clearToken();
       set({ auth: 'none', user: null });
     }
   },
@@ -63,8 +62,7 @@ export const useStore = create((set, get) => ({
 
   async login(email, password) {
     const r = await api.post('/api/auth/login', { email, password });
-    if (!r.token) throw new Error('no token returned');
-    setToken(r.token);
+    if (!r.user) throw new Error('no session returned');
     set({ user: r.user, auth: 'app' });
     await get().refresh(r.user);
   },
@@ -72,33 +70,32 @@ export const useStore = create((set, get) => ({
   async logout() {
     stopPolling();
     try { await api.post('/api/auth/logout', {}); } catch (e) {}
-    clearToken();
     set({ auth: 'none', user: null, balance: null, eventTypes: [], bookings: [] });
   },
 
   async book(payload) {
-    const r = await api.post('/api/bookings', payload);
+    const r = await api.action('post', '/api/bookings', payload);
     await get().refresh();
     return r;
   },
 
   async cancelBooking(id) {
-    await api.put('/api/bookings/' + id + '/cancel', {});
+    await api.action('put', '/api/bookings/' + id + '/cancel', {});
     await get().refresh();
   },
 
   async acceptBooking(id) {
-    await api.put('/api/bookings/' + id + '/accept', {});
+    await api.action('put', '/api/bookings/' + id + '/accept', {});
     await get().refresh();
   },
 
   async declineAssignment(id) {
-    await api.put('/api/bookings/' + id + '/decline-assignment', {});
+    await api.action('put', '/api/bookings/' + id + '/decline-assignment', {});
     await get().refresh();
   },
 
   async completeBooking(id) {
-    await api.put('/api/bookings/' + id + '/complete', {});
+    await api.action('put', '/api/bookings/' + id + '/complete', {});
     await get().refresh();
   },
 }));

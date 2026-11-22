@@ -1,5 +1,7 @@
 import { useStore } from '../store';
 import { daysSince, expenseValue } from '../utils';
+import { buildReportHtml } from '../report-html';
+import { openPrintWindow } from '../report-window';
 import { Stat, Section, Pill } from '../components';
 
 const PERIODS = ['day', 'week', 'month', 'quarter'];
@@ -77,57 +79,88 @@ New OCM stores opened: ${newStores.length}`;
   }
 
   function exportPDF() {
-    const row = (a, b) => `<tr><td>${a}</td><td style="text-align:right">${b}</td></tr>`;
     const m = logs.filter((l) => inRange(l.date) && !l.dismissed);
     const uniq = new Set(); m.forEach((l) => l.stops.forEach((s) => uniq.add(s.id)));
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Territory HQ Report — ${label}</title>
-<style>
-  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;padding:32px;max-width:760px;margin:0 auto;}
-  h1{font-size:22px;margin:0 0 2px;} .sub{color:#666;margin-bottom:20px;font-size:13px;}
-  h2{font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:#888;border-bottom:1px solid #ddd;padding-bottom:4px;margin:24px 0 10px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;}
-  td,th{padding:5px 8px;border-bottom:1px solid #eee;text-align:left;}
-  .kpis{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;}
-  .kpi{flex:1;min-width:110px;border:1px solid #e5e5e5;border-radius:8px;padding:12px;}
-  .kpi .n{font-size:24px;font-weight:700;color:#b8860b;} .kpi .l{font-size:11px;color:#777;text-transform:uppercase;}
-  .foot{margin-top:30px;color:#aaa;font-size:11px;}
-</style></head><body>
-  <h1>Territory HQ — ${period[0].toUpperCase() + period.slice(1)} Report</h1>
-  <div class="sub">${label} · ${startStr} to ${endStr} · generated ${new Date().toLocaleDateString()}</div>
-  <div class="kpis">
-    <div class="kpi"><div class="n">${logs.length}</div><div class="l">Routes run</div></div>
-    <div class="kpi"><div class="n">${visitsCompleted}</div><div class="l">Visits</div></div>
-    <div class="kpi"><div class="n">${milesDriven.toFixed(0)}</div><div class="l">Miles</div></div>
-    <div class="kpi"><div class="n">$${totalSpend.toFixed(0)}</div><div class="l">Expenses</div></div>
-    <div class="kpi"><div class="n">${creditsTotal}</div><div class="l">Credits</div></div>
-    <div class="kpi"><div class="n">${msgsInRange.length}</div><div class="l">Messages</div></div>
-  </div>
-  <h2>Expenses by category</h2>
-  <table>${Object.keys(byCat).length ? Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => row(c, '$' + v.toFixed(2))).join('') : row('None', '')}</table>
-  <h2>Coverage & activity</h2>
-  <table>${row('Unique accounts visited', uniq.size + ' of ' + st.accounts.length)}
-    ${row('Credits issued', creditsInRange.length + ' entries (' + creditsTotal + ' credits)')}
-    ${row('Messages sent', msgsInRange.length + ' (' + msgTexts + ' text, ' + msgEmails + ' email)')}
-    ${row('New OCM stores opened', newStores.length)}
-    ${row('Accounts neglected (30d+)', neglected.length)}</table>
-  <h2>Accounts by status</h2>
-  <table>${Object.entries(byStatus).map(([s, n]) => row(s, n)).join('')}${row('<b>Total</b>', '<b>' + st.accounts.length + '</b>')}</table>
-  ${logs.length ? `<h2>Routes completed</h2><table><tr><th>Date</th><th>Day</th><th>Stops</th><th style="text-align:right">Miles</th></tr>
-    ${logs.slice().sort((a, b) => a.date.localeCompare(b.date)).map((l) => `<tr><td>${l.date}</td><td>${l.day || ''}</td><td>${l.stops.map((s) => s.name).join(', ')}</td><td style="text-align:right">${(l.miles || 0).toFixed(1)}</td></tr>`).join('')}</table>` : ''}
-  ${creditsInRange.length ? `<h2>Credits issued</h2><table><tr><th>Date</th><th>Client</th><th style="text-align:right">Amount</th><th>Reason</th></tr>
-    ${creditsInRange.slice().sort((a, b) => b.date.localeCompare(a.date)).map((c) => `<tr><td>${c.date}</td><td>${c.accountName}</td><td style="text-align:right">${c.amount}</td><td>${c.note || ''}</td></tr>`).join('')}</table>` : ''}
-  ${msgsInRange.length ? `<h2>Messages sent</h2><table><tr><th>Date</th><th>Client</th><th>Channel</th><th>Message</th></tr>
-    ${msgsInRange.slice().sort((a, b) => b.date.localeCompare(a.date)).map((m) => `<tr><td>${(m.date || '').slice(0, 10)}</td><td>${m.accountName}</td><td>${m.channel}</td><td>${(m.body || '').slice(0, 70).replace(/\n/g, ' ')}</td></tr>`).join('')}</table>` : ''}
-  ${newStores.length ? `<h2>New OCM stores opened</h2><table><tr><th>Name</th><th>County</th><th>Opened</th></tr>
-    ${newStores.map((r) => `<tr><td>${(r.dba || r.entity_name || '')}</td><td>${r.county || ''}</td><td>${r.retail_date_opened_to_public || ''}</td></tr>`).join('')}</table>` : ''}
-  ${neglected.length ? `<h2>Most neglected accounts</h2><table><tr><th>Name</th><th>Status</th><th>Last visit</th></tr>
-    ${neglected.slice(0, 15).map((a) => { const ds = daysSince(a.lastVisited); return `<tr><td>${a.name}</td><td>${a.status}</td><td>${a.lastVisited ? a.lastVisited + ' (' + ds + 'd)' : 'Never'}</td></tr>`; }).join('')}</table>` : ''}
-  <div class="foot">Generated by Territory HQ</div>
-  <script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script>
-</body></html>`;
-    const w = window.open('', '_blank');
-    if (!w) { st.showToast('Allow pop-ups to export the PDF.'); return; }
-    w.document.write(html); w.document.close();
+    const tables = [
+      {
+        title: 'Expenses by category',
+        rows: Object.keys(byCat).length
+          ? Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => [c, '$' + v.toFixed(2)])
+          : [['None', '']],
+        valueRight: true,
+      },
+      {
+        title: 'Coverage & activity',
+        rows: [
+          ['Unique accounts visited', uniq.size + ' of ' + st.accounts.length],
+          ['Credits issued', creditsInRange.length + ' entries (' + creditsTotal + ' credits)'],
+          ['Messages sent', msgsInRange.length + ' (' + msgTexts + ' text, ' + msgEmails + ' email)'],
+          ['New OCM stores opened', newStores.length],
+          ['Accounts neglected (30d+)', neglected.length],
+        ],
+        valueRight: true,
+      },
+      {
+        title: 'Accounts by status',
+        rows: Object.entries(byStatus).map(([s, n]) => [s, n]),
+        valueRight: true,
+        total: st.accounts.length,
+      },
+    ];
+    if (logs.length) tables.push({
+      title: 'Routes completed',
+      header: ['Date', 'Day', 'Stops', 'Miles'],
+      rows: logs.slice().sort((a, b) => a.date.localeCompare(b.date)).map((l) => [
+        l.date, l.day || '', l.stops.map((s) => s.name).join(', '), (l.miles || 0).toFixed(1),
+      ]),
+      lastRight: true,
+    });
+    if (creditsInRange.length) tables.push({
+      title: 'Credits issued',
+      header: ['Date', 'Client', 'Amount', 'Reason'],
+      rows: creditsInRange.slice().sort((a, b) => b.date.localeCompare(a.date)).map((c) => [
+        c.date, c.accountName, c.amount, c.note || '',
+      ]),
+      amountRight: true,
+    });
+    if (msgsInRange.length) tables.push({
+      title: 'Messages sent',
+      header: ['Date', 'Client', 'Channel', 'Message'],
+      rows: msgsInRange.slice().sort((a, b) => b.date.localeCompare(a.date)).map((m) => [
+        (m.date || '').slice(0, 10), m.accountName, m.channel, (m.body || '').slice(0, 70).replace(/\n/g, ' '),
+      ]),
+    });
+    if (newStores.length) tables.push({
+      title: 'New OCM stores opened',
+      header: ['Name', 'County', 'Opened'],
+      rows: newStores.map((r) => [r.dba || r.entity_name || '', r.county || '', r.retail_date_opened_to_public || '']),
+    });
+    if (neglected.length) tables.push({
+      title: 'Most neglected accounts',
+      header: ['Name', 'Status', 'Last visit'],
+      rows: neglected.slice(0, 15).map((a) => {
+        const ds = daysSince(a.lastVisited);
+        return [a.name, a.status, a.lastVisited ? a.lastVisited + ' (' + ds + 'd)' : 'Never'];
+      }),
+    });
+
+    const html = buildReportHtml({
+      label,
+      period: period[0].toUpperCase() + period.slice(1),
+      startStr,
+      endStr,
+      generated: new Date().toLocaleDateString(),
+      kpis: [
+        [logs.length, 'Routes run'],
+        [visitsCompleted, 'Visits'],
+        [milesDriven.toFixed(0), 'Miles'],
+        ['$' + totalSpend.toFixed(0), 'Expenses'],
+        [creditsTotal, 'Credits'],
+        [msgsInRange.length, 'Messages'],
+      ],
+      tables,
+    });
+    if (!openPrintWindow(html)) st.showToast('Allow pop-ups to export the PDF.');
   }
 
   return (

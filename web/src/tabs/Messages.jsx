@@ -142,7 +142,7 @@ ${lengthNote} No corporate jargon. ${isText ? 'No subject line.' : 'Include a sh
   }
 
   const msgs = [...st.messages].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 40);
-  const apiBase = (typeof location !== 'undefined' && location.origin && !location.origin.startsWith('file')) ? location.origin : 'https://your-site.netlify.app';
+  const apiBase = (typeof location !== 'undefined' && location.origin && !location.origin.startsWith('file')) ? location.origin : 'https://your-api.example.com';
   const phone = (acc && acc.phone || '').replace(/[^0-9+]/g, '');
 
   return (
@@ -263,7 +263,8 @@ ${lengthNote} No corporate jargon. ${isText ? 'No subject line.' : 'Include a sh
           <span className="muted">→ [{'{'} accountName, licenseNumber, channel, body, to, date, direction, status {'}'}]</span><br /><br />
           GET {apiBase}/api/messages/shared?license=OCM-XXXX<br />
           <span className="muted">→ all messages for one client by OCM license number</span><br /><br />
-          <span className="muted">Header required: Authorization: Bearer &lt;READ_TOKEN&gt;</span>
+          <span className="muted">Header required: Authorization: Bearer REPLACE_WITH_TOKEN_A</span><br />
+          <span className="muted">Replace with a token key from CROSS_APP_TOKENS_JSON; it is scoped to that owner.</span>
         </div>
       </div>
     </>

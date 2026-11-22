@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, setSessionHooks, getToken, setToken, clearToken } from './api';
+import { api, setSessionHooks } from './api';
 import { currentWeekKey } from './utils';
 
 const DEFAULT_SETTINGS = {
@@ -17,8 +17,8 @@ export function validGmapsKey(k) {
 let toastTimer = null;
 
 export const useStore = create((set, get) => ({
-  // auth flow: 'boot' (checking) | 'none' (signed out) | 'pending' (awaiting approval/expired) | 'app'
-  auth: getToken() ? 'boot' : 'none',
+  // auth flow: 'boot' (checking the session cookie) | 'none' | 'pending' | 'app'
+  auth: 'boot',
   pendingReason: '',
   user: null,
   tab: 'dashboard',
@@ -64,7 +64,6 @@ export const useStore = create((set, get) => ({
   },
 
   init: async () => {
-    if (!getToken()) { set({ auth: 'none', user: null }); return; }
     try {
       const user = await api.get('/api/me');
       set({ user });
@@ -115,19 +114,19 @@ export const useStore = create((set, get) => ({
 
   logout: () => {
     try { api.post('/api/auth/logout').catch(() => {}); } catch (e) {}
-    clearToken();
     set({ auth: 'none', user: null, adminUsers: null });
   },
 }));
 
 // Wire 401/402 handling into the API client.
 setSessionHooks({
-  onUnauthorized: () => { clearToken(); useStore.setState({ auth: 'none', user: null, adminUsers: null }); },
+  onUnauthorized: () => { useStore.setState({ auth: 'none', user: null, adminUsers: null }); },
   onInactive: (reason) => useStore.setState({ auth: 'pending', pendingReason: reason === 'expired' ? 'expired' : '' }),
 });
 
-export function signIn(token, user) {
-  setToken(token);
-  useStore.setState({ user });
+// Login/signup responses set the cookie and return the user; init() verifies
+// the session with /api/me before loading data.
+export function signIn(user) {
+  useStore.setState({ user: user || null });
   useStore.getState().init();
 }

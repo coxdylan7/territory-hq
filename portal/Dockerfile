@@ -1,20 +1,24 @@
+# Build context: repository root (docker build -f portal/Dockerfile .)
 FROM node:22-alpine
 
 WORKDIR /app
 
-COPY api/package*.json api/
-COPY web/package*.json web/
+COPY portal/api/package*.json portal/api/
+COPY portal/web/package*.json portal/web/
 
-RUN npm --prefix api install --no-audit --no-fund && \
-    npm --prefix web install --no-audit --no-fund
+RUN npm --prefix portal/api install --no-audit --no-fund && \
+    npm --prefix portal/web install --no-audit --no-fund
 
-COPY . .
+COPY portal/api portal/api
+COPY portal/web portal/web
+# portal/api imports shared cookie, CSRF, session and security-header helpers.
+COPY api/src api/src
 
-RUN npm --prefix web run build && rm -rf web/node_modules
+RUN npm --prefix portal/web run build && rm -rf portal/web/node_modules
 
 ENV NODE_ENV=production
 ENV PORT=8081
 
 EXPOSE 8081
 
-CMD ["node", "api/src/server.js"]
+CMD ["node", "portal/api/src/server.js"]

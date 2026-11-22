@@ -5,6 +5,7 @@
 // Clean up with SEED_DEMO=1 node scripts/cleanup-demo.js
 const crypto = require('crypto');
 const postgres = require('postgres');
+const { demoCreditGrant, demoBooking } = require('./seed-demo-rows');
 
 if (!process.env.SEED_DEMO) {
   console.error('Refusing to run without SEED_DEMO=1 (this script mutates the shared database).');
@@ -70,10 +71,27 @@ async function main() {
     const ex = await sql`SELECT id FROM accounts WHERE name = ${name} AND user_id = ${owner.id}`;
     if (ex.length) { console.log('= store exists: ' + name); return ex[0].id; }
     const id = rid('a');
+    const licenseNumber = 'TEST-' + (name.includes('A') ? 'A' : 'B');
     await sql`INSERT INTO accounts (id, user_id, name, dba, address, city, county, phone, email, contact_name, status, priority, priority_rank, notes, lat, lng, source, license_number, last_visited, created_at)
-      VALUES (${id}, ${owner.id}, ${name}, '', '1 Demo Way', 'Albany', 'Albany', '(555) 000-0000', '', 'Demo Manager', 'Prospect', 0, 1, 'TEST DATA — created by scripts/seed-demo.js', null, null, 'manual', 'TEST-' + (name.includes('A') ? 'A' : 'B'), null, ${new Date().toISOString()})`;
-    await sql`INSERT INTO credits (id, user_id, account_id, account_name, license_number, city, amount, note, date)
-      VALUES (${rid('cr')}, ${owner.id}, ${id}, ${name}, 'TEST-' + (name.includes('A') ? 'A' : 'B'), 'Albany', ${credits}, 'Demo credit grant (TEST data)', ${iso(new Date())})`;
+      VALUES (${id}, ${owner.id}, ${name}, '', '1 Demo Way', 'Albany', 'Albany', '(555) 000-0000', '', 'Demo Manager', 'Prospect', 0, 1, 'TEST DATA — created by scripts/seed-demo.js', null, null, 'manual', ${licenseNumber}, null, ${new Date().toISOString()})`;
+    const grant = demoCreditGrant({
+      id: rid('cr'),
+      owner,
+      account: { id, name, license_number: licenseNumber, city: 'Albany' },
+      credits,
+      date: iso(new Date()),
+    });
+    await sql`INSERT INTO credits (
+      id, user_id, account_id, account_name, license_number, city,
+      amount, amount_numeric, note, date, entry_type, booking_id, source_id,
+      idempotency_key, reverses_credit_id, actor_type, actor_id, metadata
+    ) VALUES (
+      ${grant.id}, ${grant.user_id}, ${grant.account_id}, ${grant.account_name},
+      ${grant.license_number}, ${grant.city}, ${grant.amount}, ${grant.amount_numeric},
+      ${grant.note}, ${grant.date}, ${grant.entry_type}, ${grant.booking_id},
+      ${grant.source_id}, ${grant.idempotency_key}, ${grant.reverses_credit_id},
+      ${grant.actor_type}, ${grant.actor_id}, ${grant.metadata}::jsonb
+    )`;
     console.log('+ store: ' + name + ' with ' + credits + ' cr');
     return id;
   };
@@ -95,12 +113,47 @@ async function main() {
   const ambId = await mkPortal(DEMO.ambassador, 'Brand Ambassador', 'brand_ambassador', null);
 
   // 5. booking fixtures across statuses
-  const etList = (await sql`SELECT id, name FROM event_types WHERE owner_user_id = ${owner.id}`).slice(0, 2);
-  const etA = etList[0] || { id: null, name: 'Brand activation' };
+  const etList = (await sql`SELECT id, name, base_hours, base_price_credits, extra_hour_credits FROM event_types WHERE owner_user_id = ${owner.id}`).slice(0, 2);
+  const etA = etList[0] || {
+    id: null,
+    name: 'Brand activation',
+    base_hours: 4,
+    base_price_credits: 120,
+    extra_hour_credits: 30,
+  };
   const mkBooking = async ({ date, status, accountId, ambId: a, charged, eventTypeId, notes }) => {
     const id = rid('bk');
-    await sql`INSERT INTO bookings (id, owner_user_id, account_id, account_name, license_number, event_type_id, event_type_name, date, start_time, duration_hours, credits_charged, status, ambassador_user_id, notes_client, notes_admin, created_at, updated_at)
-      VALUES (${id}, ${owner.id}, ${accountId}, ${'TEST — Store A'}, 'TEST-A', ${eventTypeId}, ${etA.name}, ${date}, '10:00', 4, ${charged !== undefined ? charged : null}, ${status}, ${a || null}, null, ${notes || null}, ${new Date().toISOString()}, null)`;
+    const [account] = await sql`SELECT id, name, license_number, city FROM accounts WHERE id = ${accountId}`;
+    const eventType = etList.find((et) => et.id === eventTypeId) || etA;
+    const row = demoBooking({
+      id,
+      owner,
+      account,
+      eventType,
+      date,
+      status,
+      ambassadorUserId: a,
+      charged,
+      notes,
+    });
+    await sql`INSERT INTO bookings (
+      id, owner_user_id, account_id, account_name, license_number,
+      event_type_id, event_type_name, date, start_time,
+      duration_hours, duration_hours_numeric, credits_charged, credits_charged_numeric,
+      status, ambassador_user_id, notes_client, notes_admin,
+      quoted_credits, quote_base_hours, quote_base_credits, quote_extra_hour_credits,
+      requested_by_portal_user_id, created_by_actor_type, created_by_actor_id,
+      created_at, updated_at
+    ) VALUES (
+      ${row.id}, ${row.owner_user_id}, ${row.account_id}, ${row.account_name},
+      ${row.license_number}, ${row.event_type_id}, ${row.event_type_name}, ${row.date},
+      ${row.start_time}, ${row.duration_hours}, ${row.duration_hours_numeric},
+      ${row.credits_charged}, ${row.credits_charged_numeric}, ${row.status},
+      ${row.ambassador_user_id}, ${row.notes_client}, ${row.notes_admin},
+      ${row.quoted_credits}, ${row.quote_base_hours}, ${row.quote_base_credits},
+      ${row.quote_extra_hour_credits}, ${row.requested_by_portal_user_id},
+      ${row.created_by_actor_type}, ${row.created_by_actor_id}, ${row.created_at}, ${row.updated_at}
+    )`;
   };
   const seed = await sql`SELECT COUNT(*)::int AS n FROM bookings WHERE owner_user_id = ${owner.id} AND account_id = ${storeA} AND notes_admin LIKE '%seed-demo%'`;
   if (Number(seed[0].n) === 0) {

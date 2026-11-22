@@ -8,8 +8,18 @@
   },
   "scripts": {
     "build": "npm --prefix web install --no-audit --no-fund && npm --prefix web run build",
+    "build:portal": "npm --prefix portal run build",
+    "build:all": "npm run build && npm run build:portal",
     "start": "node --env-file-if-exists=.env api/src/server.js",
     "dev:api": "node --env-file-if-exists=.env api/src/server.js",
-    "dev:web": "npm --prefix web run dev"
+    "dev:web": "npm --prefix web run dev",
+    "test": "node --test test/*.test.js && npm --prefix api test && npm --prefix web test && npm --prefix portal/api test && npm --prefix portal/web test",
+    "test:local": "npm test",
+    "test:postgres": "node scripts/run-postgres-tests.js",
+    "check:migrations": "node --test test/migration-order.test.js test/schema-migration-parity.test.js",
+    "check:diff": "git diff --check && git diff --cached --check",
+    "verify": "npm run test:local && npm run test:postgres && npm run build:all && npm run check:diff",
+    "migration:preflight": "node scripts/migration-preflight.js",
+    "migration:verify": "node scripts/post-migration-verify.js"
   }
 }

@@ -3,6 +3,7 @@ import L from 'leaflet';
 import { useStore, signIn } from './store';
 import { api } from './api';
 import { prevWeekKey, nextWeekKey, currentWeekKey } from './utils';
+import { applySignupResult } from './auth-result.js';
 
 export function Section({ children }) {
   return <h2 className="section">{children}</h2>;
@@ -134,16 +135,18 @@ export function AuthScreen() {
       if (mode === 'signup') {
         const name = el('authName').value.trim();
         if (!name || !email || pass.length < 8) { setErr('Fill all fields; password needs 8+ characters.'); return; }
-        const r = await fetch('/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password: pass }) });
+        const r = await fetch('/api/auth/signup', { credentials: 'include', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password: pass }) });
         const d = await r.json();
         if (!r.ok) { setErr(d.error || 'Sign-up failed.'); return; }
-        if (d.token) { signIn(d.token, d.user); }
-        else { useStore.setState({ auth: 'pending', pendingReason: '' }); }
+        applySignupResult(d, {
+          signIn,
+          pending: () => useStore.setState({ auth: 'pending', pendingReason: '' }),
+        });
       } else {
-        const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
+        const r = await fetch('/api/auth/login', { credentials: 'include', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass }) });
         const d = await r.json();
         if (!r.ok) { setErr(d.error || 'Sign-in failed.'); return; }
-        signIn(d.token, d.user);
+        signIn(d.user);
       }
     } catch (e) { setErr('Network error (was: ' + (e && e.message ? e.message : e) + ')'); }
   }

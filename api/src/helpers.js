@@ -1,4 +1,4 @@
-// Port of the auth + response helpers from reference/netlify/functions/api.js
+// Auth + response helpers shared by the Express API
 const crypto = require('crypto');
 
 /* ---------------- passwords (PBKDF2, same format as the original) ---------------- */
@@ -47,11 +47,14 @@ function json(res, obj, status) {
   return res.status(status || 200).set(SEC).type('application/json').json(obj);
 }
 function jsonCors(res, obj, origin, status) {
-  const allow = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  // Global corsMiddleware has already applied exact headers. This helper only
+  // removes the legacy wildcard path for direct callers; cross-app bearer CORS
+  // remains limited to exact ALLOWED_ORIGINS values.
+  const allow = String(process.env.ALLOWED_ORIGINS || '')
+    .split(',').map((s) => s.trim()).filter((s) => s && s !== '*');
   res.set(SEC).type('application/json');
-  if (allow.length && (allow.includes('*') || allow.includes(origin))) {
-    res.set('vary', 'Origin');
-    res.set('access-control-allow-origin', allow.includes('*') ? '*' : origin);
+  if (origin && allow.includes(String(origin))) {
+    res.set('access-control-allow-origin', String(origin));
     res.set('access-control-allow-methods', 'GET, OPTIONS');
     res.set('access-control-allow-headers', 'authorization, content-type');
   }
@@ -59,12 +62,10 @@ function jsonCors(res, obj, origin, status) {
 }
 
 function safeEq(a, b) {
-  a = String(a || ''); b = String(b || '');
-  if (a.length !== b.length || !a.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-}
-function readTokenOk(req) {
-  return safeEq(bearerToken(req), process.env.READ_TOKEN || '');
+  const left = Buffer.from(String(a || ''));
+  const right = Buffer.from(String(b || ''));
+  if (left.length !== right.length || !left.length) return false;
+  return crypto.timingSafeEqual(left, right);
 }
 
 module.exports = {
@@ -77,5 +78,4 @@ module.exports = {
   json,
   jsonCors,
   safeEq,
-  readTokenOk,
 };

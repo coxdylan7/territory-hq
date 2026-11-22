@@ -1,5 +1,4 @@
 // Territory HQ — REST API (Express + Supabase Postgres)
-// Faithful port of reference/netlify/functions/api.js (Netlify/Turso)
 const crypto = require('crypto');
 const express = require('express');
 const path = require('path');
@@ -7,27 +6,42 @@ const fs = require('fs');
 const { sql } = require('./db');
 const { ensureSchema } = require('./schema');
 const { smsConfigured, sendSmsTwilio, proxyAnthropic } = require('./integrations');
+const { resolveCrossAppOwner } = require('./cross-app-auth');
+const { makeCrossAppHandlers } = require('./cross-app-handlers');
+const { makeErrorHandler, internalError } = require('./error-handler');
+const { securityHeadersMiddleware } = require('./security-headers');
+const { csrfMiddleware } = require('./csrf');
+const { corsMiddleware } = require('./cors');
+const { trustProxySetting } = require('./trust-proxy');
+const { setSessionCookie, clearSessionCookie, HQ_COOKIE } = require('./session-cookie');
+const { currentSessionUser, sessionTokenFromRequest } = require('./session-auth');
 const {
   hashPassword, verifyPassword, newToken, userView, isUsable,
-  bearerToken, json, jsonCors, readTokenOk,
+  json, jsonCors,
 } = require('./helpers');
+const { readIdempotencyKey, canonicalRequestHash } = require('./idempotency');
+const { errorBody } = require('./service-errors');
+const { adjustCredits, ledgerView } = require('./credit-ledger');
+const {
+  approveBooking,
+  cancelBooking,
+  declineBooking,
+  assignBooking,
+  removePortalUsersBookings,
+  bookingView: sharedBookingView,
+} = require('./booking-service');
 
 const app = express();
 app.disable('x-powered-by');
+// Forwarded protocol/host headers are trusted only when the operator opts in.
+app.set('trust proxy', trustProxySetting(process.env.TRUST_PROXY));
+app.use(securityHeadersMiddleware());
 
-/* ---------------- CORS preflight ---------------- */
-app.use((req, res, next) => {
-  const origin = req.headers.origin || '';
-  const allow = (process.env.ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (allow.length && (allow.includes('*') || allow.includes(origin))) {
-    res.set('vary', 'Origin');
-    res.set('access-control-allow-origin', allow.includes('*') ? '*' : origin);
-    res.set('access-control-allow-methods', 'GET, OPTIONS');
-    res.set('access-control-allow-headers', 'authorization, content-type');
-  }
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
+/* ---------------- exact CORS and preflight ---------------- */
+app.use(corsMiddleware());
+
+// Cookie-authenticated state changes require a first-party Origin.
+app.use(csrfMiddleware());
 
 app.use(express.json());
 
@@ -37,14 +51,10 @@ app.use((req, res, next) => {
   next();
 });
 
-/* ---------------- current user from bearer token ---------------- */
+/* ---------------- current user from HttpOnly session cookie ---------------- */
+// Cross-app bearer tokens are resolved only by resolveCrossAppOwner below.
 async function currentUser(req) {
-  const token = bearerToken(req);
-  if (!token) return null;
-  const rows = await sql`
-    SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
-    WHERE s.token = ${token} AND s.expires > ${new Date().toISOString()}`;
-  return rows[0] || null;
+  return currentSessionUser(sql, req);
 }
 
 /* ================= auth ================= */
@@ -64,7 +74,11 @@ app.post('/api/auth/signup', async (req, res) => {
     const token = newToken();
     const exp = new Date(Date.now() + 30 * 864e5).toISOString();
     await sql`INSERT INTO sessions (token, user_id, expires) VALUES (${token}, ${id}, ${exp})`;
-    return json(res, { ok: true, token });
+    setSessionCookie(res, HQ_COOKIE, token);
+    return json(res, {
+      ok: true,
+      user: userView({ id, name, email: email.toLowerCase(), role: 'admin', status: 'active', created_at: new Date().toISOString() }),
+    });
   }
   return json(res, { ok: true, pending: true });
 });
@@ -78,37 +92,33 @@ app.post('/api/auth/login', async (req, res) => {
     const token = newToken();
     const exp = new Date(Date.now() + 30 * 864e5).toISOString();
     await sql`INSERT INTO sessions (token, user_id, expires) VALUES (${token}, ${u.id}, ${exp})`;
-    return json(res, { ok: true, token, user: userView(u) });
+    setSessionCookie(res, HQ_COOKIE, token);
+    return json(res, { ok: true, user: userView(u) });
   } catch (err) {
-    console.error('login error:', err.message);
+    console.error('login error:', err && err.stack ? err.stack : err);
     return json(res, { error: 'login failed' }, 500);
   }
 });
 
 app.post('/api/auth/logout', async (req, res) => {
-  const token = bearerToken(req);
+  const token = sessionTokenFromRequest(req);
   if (token) await sql`DELETE FROM sessions WHERE token = ${token}`;
+  clearSessionCookie(res, HQ_COOKIE);
   return json(res, { ok: true });
 });
 
-/* ================= cross-app reads (READ_TOKEN) ================= */
-app.get('/api/credits/balances', async (req, res) => {
-  if (!readTokenOk(req)) return jsonCors(res, { error: 'unauthorized' }, req.headers.origin, 401);
-  const rows = await sql`
-    SELECT account_id, account_name, license_number, city, SUM(amount)::float AS balance
-    FROM credits GROUP BY account_id, account_name, license_number, city`;
-  let out = rows.map((r) => ({ accountId: r.account_id, accountName: r.account_name, licenseNumber: r.license_number, city: r.city, balance: r.balance }));
-  if (req.query.license) out = out.filter((x) => x.licenseNumber === req.query.license);
-  return jsonCors(res, out, req.headers.origin);
+/* ================= cross-app reads (owner-scoped tokens) ================= */
+// Each opaque token maps to exactly one owner_user_id in CROSS_APP_TOKENS_JSON.
+// The owner id is never accepted from the caller; it is resolved from the
+// bearer token and used as a SQL scope by the query helpers.
+const crossApp = makeCrossAppHandlers({
+  sql,
+  resolveOwner: (req) => resolveCrossAppOwner(req),
+  reply: jsonCors,
 });
 
-app.get('/api/messages/shared', async (req, res) => {
-  if (!readTokenOk(req)) return jsonCors(res, { error: 'unauthorized' }, req.headers.origin, 401);
-  const rows = await sql`SELECT * FROM messages ORDER BY date DESC`;
-  let out = rows.map((r) => ({ id: r.id, accountId: r.account_id, accountName: r.account_name, licenseNumber: r.license_number, city: r.city, channel: r.channel, purpose: r.purpose, body: r.body, to: r.recipient, direction: r.direction, date: r.date }));
-  if (req.query.license) out = out.filter((x) => x.licenseNumber === req.query.license);
-  return jsonCors(res, out, req.headers.origin);
-});
+app.get('/api/credits/balances', (req, res) => crossApp.creditsBalances(req, res));
+app.get('/api/messages/shared', (req, res) => crossApp.sharedMessages(req, res));
 
 /* ================= authed user ================= */
 app.get('/api/me', async (req, res) => {
@@ -155,17 +165,23 @@ app.delete('/api/admin/users/:id', async (req, res) => {
     return json(res, { error: 'This is the last active admin — promote someone else first.' }, 400);
   }
   try {
+    const portalUserIds = (await sql`
+      SELECT id FROM portal_users WHERE owner_user_id = ${id} ORDER BY id
+    `).map((row) => row.id);
     await sql.begin(async (tx) => {
-      await tx`DELETE FROM sessions WHERE user_id = ${id}`;
-      await tx`DELETE FROM portal_sessions WHERE user_id IN (SELECT id FROM portal_users WHERE owner_user_id = ${id})`;
-      await tx`UPDATE bookings SET ambassador_user_id = NULL WHERE ambassador_user_id IN (SELECT id FROM portal_users WHERE owner_user_id = ${id})`;
-      await tx`DELETE FROM portal_users WHERE owner_user_id = ${id}`;
-      await tx`DELETE FROM portal_invites WHERE owner_user_id = ${id}`;
-      await tx`DELETE FROM users WHERE id = ${id}`;
+      await removePortalUsersBookings(tx, {
+        ownerUserId: id,
+        portalUserIds,
+        actor: { type: 'admin_user', id: user.id },
+        key: `admin-user-delete:${id}`,
+        requestHash: `admin-user-delete:${id}`,
+        deleteInvites: true,
+        deleteOwnerUser: true,
+      });
     });
     return json(res, { ok: true });
   } catch (e) {
-    return json(res, { error: 'Delete failed: ' + e.message }, 500);
+    return json(res, internalError('admin user deletion', e), 500);
   }
 });
 
@@ -178,6 +194,36 @@ function gate(handler) {
     if (!isUsable(user)) return json(res, { error: 'inactive', reason: userView(user).status }, 402);
     return handler(req, res, user);
   };
+}
+
+const HQ_ACTOR_TYPE = 'hq_user';
+
+function sendCommandResult(res, result) {
+  if (result.replayed) res.setHeader('Idempotency-Replayed', 'true');
+  const body = result.body && result.body.code === 'AMBASSADOR_NOT_FOUND'
+    ? { ...result.body, error: 'Pick a valid staff member.' }
+    : result.body;
+  return json(res, body, result.status);
+}
+
+function commandContext(req, res, user, operation, resourceId) {
+  try {
+    const key = readIdempotencyKey(req);
+    const actor = { type: HQ_ACTOR_TYPE, id: user.id };
+    return {
+      actor,
+      key,
+      requestHash: canonicalRequestHash({
+        operation,
+        resourceId: resourceId || null,
+        actor,
+        body: req.body || {},
+      }),
+    };
+  } catch (error) {
+    sendCommandResult(res, { status: error.status || 400, body: errorBody(error) });
+    return null;
+  }
 }
 
 /* ================= settings ================= */
@@ -307,13 +353,25 @@ app.post('/api/route-log', gate(async (req, res, user) => {
 /* ================= credits ================= */
 app.get('/api/credits', gate(async (req, res, user) => {
   const rows = await sql`SELECT * FROM credits WHERE user_id = ${user.id} ORDER BY date DESC`;
-  return json(res, rows.map((r) => ({ id: r.id, accountId: r.account_id, accountName: r.account_name, licenseNumber: r.license_number, city: r.city, amount: r.amount, note: r.note, date: r.date })));
+  return json(res, rows.map(ledgerView));
 }));
 
 app.post('/api/credits', gate(async (req, res, user) => {
-  const c = req.body || {}; const id = c.id || 'cr' + Date.now();
-  await sql`INSERT INTO credits (id, user_id, account_id, account_name, license_number, city, amount, note, date) VALUES (${id}, ${user.id}, ${c.accountId}, ${c.accountName || ''}, ${c.licenseNumber || ''}, ${c.city || ''}, ${c.amount || 0}, ${c.note || ''}, ${c.date})`;
-  return json(res, { id });
+  const c = req.body || {};
+  const context = commandContext(req, res, user, 'credits.adjust', c.accountId || null);
+  if (!context) return undefined;
+  const result = await adjustCredits(sql, {
+    ownerUserId: user.id,
+    accountId: c.accountId,
+    amount: c.amount,
+    note: c.note,
+    date: c.date,
+    accountName: c.accountName,
+    licenseNumber: c.licenseNumber,
+    city: c.city,
+    ...context,
+  });
+  return sendCommandResult(res, result);
 }));
 
 /* ================= messages ================= */
@@ -384,13 +442,6 @@ const DEFAULT_EVENT_TYPES = [
   { name: 'Budtender training', description: 'Staff education session', base_hours: 2, base_price_credits: 80, extra_hour_credits: 40 },
 ];
 
-// cost = base + (hours - base_hours) × extra-hour rate (never below base)
-function creditEstimate(et, hours) {
-  const h = Math.max(0, Number(hours) || 0);
-  const baseH = Number(et.base_hours) || 0;
-  return Math.round((Number(et.base_price_credits) || 0) + Math.max(0, h - baseH) * (Number(et.extra_hour_credits) || 0));
-}
-
 async function seedEventTypes(userId) {
   const existing = await sql`SELECT COUNT(*)::int AS n FROM event_types WHERE owner_user_id = ${userId}`;
   if (Number(existing[0].n) > 0) return;
@@ -418,15 +469,25 @@ app.post('/api/event-types', gate(async (req, res, user) => {
 
 app.put('/api/event-types/:id', gate(async (req, res, user) => {
   const b = req.body || {};
-  await sql`UPDATE event_types SET name = ${b.name}, description = ${b.description || ''},
+  const updated = await sql`UPDATE event_types SET name = ${b.name}, description = ${b.description || ''},
       base_hours = ${b.baseHours ?? 4}, base_price_credits = ${b.basePriceCredits ?? 0},
       extra_hour_credits = ${b.extraHourCredits ?? 0}, active = ${b.active === false ? 0 : 1}
-    WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+    WHERE id = ${req.params.id} AND owner_user_id = ${user.id}
+    RETURNING id`;
+  if (!updated.length) return json(res, { error: 'not found', code: 'EVENT_TYPE_NOT_FOUND' }, 404);
   return json(res, { ok: true });
 }));
 
 app.delete('/api/event-types/:id', gate(async (req, res, user) => {
-  await sql`DELETE FROM event_types WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+  const used = await sql`SELECT id FROM bookings WHERE event_type_id = ${req.params.id} AND owner_user_id = ${user.id} LIMIT 1`;
+  if (used.length) {
+    return json(res, {
+      error: 'This event type is referenced by a booking and cannot be deleted.',
+      code: 'EVENT_TYPE_IN_USE',
+    }, 409);
+  }
+  const updated = await sql`UPDATE event_types SET active = 0 WHERE id = ${req.params.id} AND owner_user_id = ${user.id} RETURNING id`;
+  if (!updated.length) return json(res, { error: 'not found', code: 'EVENT_TYPE_NOT_FOUND' }, 404);
   return json(res, { ok: true });
 }));
 
@@ -458,7 +519,10 @@ app.get('/api/portal-users', gate(async (req, res, user) => {
 
 app.put('/api/portal-users/:id/status', gate(async (req, res, user) => {
   const status = (req.body || {}).status === 'suspended' ? 'suspended' : 'active';
-  await sql`UPDATE portal_users SET status = ${status} WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+  const updated = await sql`UPDATE portal_users SET status = ${status}
+    WHERE id = ${req.params.id} AND owner_user_id = ${user.id}
+    RETURNING id`;
+  if (!updated.length) return json(res, { error: 'not found', code: 'PORTAL_USER_NOT_FOUND' }, 404);
   return json(res, { ok: true });
 }));
 
@@ -499,20 +563,30 @@ app.get('/api/portal-invites', gate(async (req, res, user) => {
 }));
 
 app.delete('/api/portal-invites/:id', gate(async (req, res, user) => {
-  await sql`DELETE FROM portal_invites WHERE id = ${req.params.id} AND owner_user_id = ${user.id} AND used_at IS NULL`;
+  const deleted = await sql`DELETE FROM portal_invites
+    WHERE id = ${req.params.id} AND owner_user_id = ${user.id} AND used_at IS NULL
+    RETURNING id`;
+  if (!deleted.length) return json(res, { error: 'not found', code: 'PORTAL_INVITE_NOT_FOUND' }, 404);
   return json(res, { ok: true });
 }));
 
 app.delete('/api/portal-users/:id', gate(async (req, res, user) => {
   try {
+    const target = await sql`SELECT id FROM portal_users
+      WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+    if (!target.length) return json(res, { error: 'not found', code: 'PORTAL_USER_NOT_FOUND' }, 404);
     await sql.begin(async (tx) => {
-      await tx`DELETE FROM portal_sessions WHERE user_id = ${req.params.id}`;
-      await tx`UPDATE bookings SET ambassador_user_id = NULL WHERE ambassador_user_id = ${req.params.id}`;
-      await tx`DELETE FROM portal_users WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+      await removePortalUsersBookings(tx, {
+        ownerUserId: user.id,
+        portalUserIds: [req.params.id],
+        actor: { type: HQ_ACTOR_TYPE, id: user.id },
+        key: `portal-user-delete:${user.id}:${req.params.id}`,
+        requestHash: `portal-user-delete:${user.id}:${req.params.id}`,
+      });
     });
     return json(res, { ok: true });
   } catch (e) {
-    return json(res, { error: 'Delete failed: ' + e.message }, 500);
+    return json(res, internalError('portal user deletion', e), 500);
   }
 }));
 
@@ -522,106 +596,88 @@ app.put('/api/portal-users/:id/account', gate(async (req, res, user) => {
     const acc = (await sql`SELECT id FROM accounts WHERE id = ${accountId} AND user_id = ${user.id}`)[0];
     if (!acc) return json(res, { error: 'That account does not belong to you.' }, 400);
   }
-  await sql`UPDATE portal_users SET account_id = ${accountId} WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`;
+  const updated = await sql`UPDATE portal_users SET account_id = ${accountId}
+    WHERE id = ${req.params.id} AND owner_user_id = ${user.id}
+    RETURNING id`;
+  if (!updated.length) return json(res, { error: 'not found', code: 'PORTAL_USER_NOT_FOUND' }, 404);
   return json(res, { ok: true });
 }));
 
 /* bookings */
-const bookingView = (r, amb) => ({
-  id: r.id, accountId: r.account_id, accountName: r.account_name, licenseNumber: r.license_number,
-  eventTypeId: r.event_type_id, eventTypeName: r.event_type_name, date: r.date, startTime: r.start_time,
-  durationHours: r.duration_hours, creditsCharged: r.credits_charged, status: r.status,
-  ambassadorUserId: r.ambassador_user_id, ambassadorName: amb ? amb.name : null, ambassadorEmail: amb ? amb.email : null,
-  notesClient: r.notes_client, notesAdmin: r.notes_admin, createdAt: r.created_at, updatedAt: r.updated_at,
-});
+function bookingWithAmbassador(row, ambassador) {
+  return {
+    ...sharedBookingView(row),
+    ambassadorName: ambassador ? ambassador.name : null,
+    ambassadorEmail: ambassador ? ambassador.email : null,
+  };
+}
 
-async function bookingAmbMap(rows) {
+async function bookingAmbMap(rows, ownerUserId) {
   const ids = [...new Set(rows.map((r) => r.ambassador_user_id).filter(Boolean))];
   if (!ids.length) return {};
-  const users = await sql`SELECT id, name, email FROM portal_users WHERE id = ANY(${ids})`;
+  const users = await sql`
+    SELECT id, name, email
+      FROM portal_users
+     WHERE owner_user_id = ${ownerUserId}
+       AND id = ANY(${ids})`;
   const map = {}; users.forEach((a) => { map[a.id] = a; });
   return map;
 }
 
 app.get('/api/bookings', gate(async (req, res, user) => {
   const rows = await sql`SELECT * FROM bookings WHERE owner_user_id = ${user.id} ORDER BY date ASC, start_time ASC`;
-  const map = await bookingAmbMap(rows);
-  let out = rows.map((r) => bookingView(r, map[r.ambassador_user_id]));
+  const map = await bookingAmbMap(rows, user.id);
+  let out = rows.map((r) => bookingWithAmbassador(r, map[r.ambassador_user_id]));
   if (req.query.status) out = out.filter((x) => x.status === req.query.status);
   return json(res, out);
 }));
 
 app.put('/api/bookings/:id/assign', gate(async (req, res, user) => {
-  const ambassadorUserId = (req.body || {}).ambassadorUserId || null;
-  if (ambassadorUserId) {
-    const amb = (await sql`SELECT id FROM portal_users WHERE id = ${ambassadorUserId} AND owner_user_id = ${user.id} AND role = 'brand_ambassador' AND status = 'active'`)[0];
-    if (!amb) return json(res, { error: 'Pick a valid staff member.' }, 400);
-  }
-  const row = (await sql`SELECT * FROM bookings WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`)[0];
-  if (!row) return json(res, { error: 'not found' }, 404);
-  if (row.status !== 'approved' && row.status !== 'confirmed') return json(res, { error: 'Only approved or confirmed bookings can be reassigned.' }, 400);
-  await sql`UPDATE bookings SET ambassador_user_id = ${ambassadorUserId}, status = 'approved', updated_at = ${new Date().toISOString()} WHERE id = ${row.id}`;
-  return json(res, { ok: true });
+  const context = commandContext(req, res, user, 'booking.assign', req.params.id);
+  if (!context) return undefined;
+  const result = await assignBooking(sql, {
+    ownerUserId: user.id,
+    bookingId: req.params.id,
+    ambassadorUserId: (req.body || {}).ambassadorUserId || null,
+    ...context,
+  });
+  return sendCommandResult(res, result);
 }));
 
 app.put('/api/bookings/:id/approve', gate(async (req, res, user) => {
-  const b = req.body || {};
-  const ambassadorUserId = b.ambassadorUserId || null;
-  if (ambassadorUserId) {
-    const amb = (await sql`SELECT id FROM portal_users WHERE id = ${ambassadorUserId} AND owner_user_id = ${user.id} AND role = 'brand_ambassador' AND status = 'active'`)[0];
-    if (!amb) return json(res, { error: 'Pick a valid staff member.' }, 400);
-  }
-  const row = (await sql`SELECT * FROM bookings WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`)[0];
-  if (!row) return json(res, { error: 'not found' }, 404);
-  if (row.status !== 'requested') return json(res, { error: 'This request was already handled.' }, 400);
-  const et = (await sql`SELECT * FROM event_types WHERE id = ${row.event_type_id} AND owner_user_id = ${user.id}`)[0]
-    || { base_hours: 4, base_price_credits: 0, extra_hour_credits: 0 };
-  const charge = creditEstimate(et, row.duration_hours);
-  try {
-    const done = await sql.begin(async (tx) => {
-      const upd = await tx`UPDATE bookings SET status = 'approved', credits_charged = ${charge},
-          ambassador_user_id = ${ambassadorUserId}, notes_admin = ${b.notes || row.notes_admin || ''},
-          updated_at = ${new Date().toISOString()}
-        WHERE id = ${row.id} AND status = 'requested'`;
-      if (Number(upd.count) !== 1) return false;
-      await tx`INSERT INTO credits (id, user_id, account_id, account_name, license_number, city, amount, note, date)
-        VALUES (${'cr' + Date.now() + Math.random().toString(36).slice(2, 6)}, ${user.id}, ${row.account_id},
-          ${row.account_name}, ${row.license_number || ''}, '',
-          ${-charge}, ${`${row.event_type_name} ${row.date}${row.start_time ? ' @' + row.start_time : ''} (${Number(row.duration_hours) || 0}h) — approved`},
-          ${new Date().toISOString().slice(0, 10)})`;
-      return true;
-    });
-    if (!done) return json(res, { error: 'This request was already handled.' }, 400);
-  } catch (e) {
-    console.error('approve failed:', e.message);
-    return json(res, { error: 'Approve failed: ' + e.message }, 500);
-  }
-  const after = (await sql`SELECT * FROM bookings WHERE id = ${req.params.id}`)[0];
-  const map = await bookingAmbMap([after]);
-  return json(res, bookingView(after, map[after.ambassador_user_id]));
+  const context = commandContext(req, res, user, 'booking.approve', req.params.id);
+  if (!context) return undefined;
+  const result = await approveBooking(sql, {
+    ownerUserId: user.id,
+    bookingId: req.params.id,
+    ambassadorUserId: (req.body || {}).ambassadorUserId || null,
+    notes: (req.body || {}).notes,
+    ...context,
+  });
+  return sendCommandResult(res, result);
 }));
 
 app.put('/api/bookings/:id/decline', gate(async (req, res, user) => {
-  const b = req.body || {};
-  await sql`UPDATE bookings SET status = 'declined', notes_admin = ${b.notes || ''}, updated_at = ${new Date().toISOString()}
-    WHERE id = ${req.params.id} AND owner_user_id = ${user.id} AND status = 'requested'`;
-  return json(res, { ok: true });
+  const context = commandContext(req, res, user, 'booking.decline', req.params.id);
+  if (!context) return undefined;
+  const result = await declineBooking(sql, {
+    ownerUserId: user.id,
+    bookingId: req.params.id,
+    notes: (req.body || {}).notes,
+    ...context,
+  });
+  return sendCommandResult(res, result);
 }));
 
 app.put('/api/bookings/:id/cancel', gate(async (req, res, user) => {
-  const row = (await sql`SELECT * FROM bookings WHERE id = ${req.params.id} AND owner_user_id = ${user.id}`)[0];
-  if (!row) return json(res, { error: 'not found' }, 404);
-  if (row.status !== 'approved' && row.status !== 'confirmed' && row.status !== 'requested') return json(res, { error: 'This booking cannot be cancelled now.' }, 400);
-  await sql.begin(async (tx) => {
-    await tx`UPDATE bookings SET status = 'cancelled', updated_at = ${new Date().toISOString()} WHERE id = ${row.id}`;
-    if ((row.status === 'approved' || row.status === 'confirmed') && Number(row.credits_charged) > 0) {
-      await tx`INSERT INTO credits (id, user_id, account_id, account_name, license_number, city, amount, note, date)
-        VALUES (${'cr' + Date.now() + Math.random().toString(36).slice(2, 6)}, ${user.id}, ${row.account_id},
-          ${row.account_name}, ${row.license_number || ''}, '', ${Number(row.credits_charged)},
-          ${`Refund — ${row.event_type_name} ${row.date} cancelled`}, ${new Date().toISOString().slice(0, 10)})`;
-    }
+  const context = commandContext(req, res, user, 'booking.cancel', req.params.id);
+  if (!context) return undefined;
+  const result = await cancelBooking(sql, {
+    ownerUserId: user.id,
+    bookingId: req.params.id,
+    ...context,
   });
-  return json(res, { ok: true });
+  return sendCommandResult(res, result);
 }));
 
 /* ================= AI message generation ================= */
@@ -644,11 +700,7 @@ if (process.env.SERVE_WEB !== 'false' && fs.existsSync(WEB_DIST)) {
 }
 
 /* ================= error handling ================= */
-app.use((err, req, res, next) => {
-  if (err && err.type === 'entity.parse.failed') return json(res, { error: 'invalid JSON body' }, 400);
-  console.error('API ERROR:', err && err.stack ? err.stack : err);
-  return json(res, { error: (err && err.message) || 'Internal error' }, 500);
-});
+app.use(makeErrorHandler());
 
 /* ================= start ================= */
 const PORT = parseInt(process.env.PORT || '8080', 10);

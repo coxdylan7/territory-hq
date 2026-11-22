@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './store';
-import { api, setToken } from './api';
-import { todayStr, creditEstimate, fmtDate, fmtMoney } from './utils';
+import { api } from './api';
+import { todayStr, creditEstimate, fmtCredits, fmtDate, fmtMoney } from './utils';
+import { openExternal } from './open-external.js';
 
 const STATUS_PILL = { requested: 'requested', approved: 'approved', confirmed: 'confirmed', declined: 'declined', cancelled: 'cancelled', completed: 'completed' };
 
@@ -152,9 +153,7 @@ function InviteSignup({ token, world, ambassador }) {
     if (!ambassador && !accountId) { setErr('Pick your store below.'); return; }
     setBusy(true);
     try {
-      const r = await api.post('/api/auth/invite-signup', { token, name, password, accountId: ambassador ? undefined : accountId });
-      if (!r.token) throw new Error('no session returned');
-      setToken(r.token);
+      await api.post('/api/auth/invite-signup', { token, name, password, accountId: ambassador ? undefined : accountId });
       const me = await api.get('/api/me');
       st.set({ user: me, auth: 'app' });
       await st.refresh(me);
@@ -291,9 +290,8 @@ function StoreSchedule() {
   const st = useStore();
   const today = todayStr();
   const rows = [...st.bookings].sort((a, b) => (a.date + (a.startTime || '')).localeCompare(b.date + (b.startTime || '')));
-  const live = rows.map((b) => ((b.status === 'approved' || b.status === 'confirmed') && b.date < today ? { ...b, status: 'completed' } : b));
-  const upcoming = live.filter((b) => b.date >= today && (b.status === 'requested' || b.status === 'approved' || b.status === 'confirmed'));
-  const past = live.filter((b) => b.date < today || b.status === 'completed' || b.status === 'declined' || b.status === 'cancelled').reverse();
+  const upcoming = rows.filter((b) => b.date >= today && (b.status === 'requested' || b.status === 'approved' || b.status === 'confirmed'));
+  const past = rows.filter((b) => b.date < today || b.status === 'completed' || b.status === 'declined' || b.status === 'cancelled').reverse();
 
   return (
     <>
@@ -311,7 +309,8 @@ function StoreSchedule() {
             <div className="ttl">{b.eventTypeName}</div>
             <div className="sub">
               {fmtDate(b.date)}{b.startTime ? ` @ ${b.startTime}` : ''} · {Number(b.durationHours) || 0}h
-              {b.creditsCharged != null ? ` · ${fmtMoney(b.creditsCharged)} cr` : ''}
+              {b.creditsCharged == null && b.quotedCredits != null ? ` · ${fmtMoney(b.quotedCredits)} cr quoted` : ''}
+              {b.creditsCharged != null ? ` · ${fmtMoney(b.creditsCharged)} cr charged` : ''}
               {b.ambassadorName ? ` · ${b.ambassadorName}` : ''}
             </div>
             {b.notesAdmin ? <div className="onnote" style={{ marginTop: 6 }}>Note: {b.notesAdmin}</div> : null}
@@ -358,9 +357,10 @@ function BookingModal({ et, onClose }) {
   const tooLittle = st.balance != null && st.balance < cost;
 
   async function submit() {
+    if (!startTime) { setErr('Start time is required.'); return; }
     setBusy(true); setErr(null);
     try {
-      await st.book({ eventTypeId: et.id, date, startTime: startTime || null, durationHours: hours, notes: notes || null });
+      await st.book({ eventTypeId: et.id, date, startTime, durationHours: hours, notes: notes || null });
       st.showToast('Request sent to your rep — you’ll see the status here.');
       setBusy(false); onClose();
     } catch (e) {
@@ -380,7 +380,7 @@ function BookingModal({ et, onClose }) {
         <div className="grid2">
           <div>
             <label>Start time</label>
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+            <input type="time" required value={startTime} onChange={(e) => setStartTime(e.target.value)} />
           </div>
           <div>
             <label>Duration (hours)</label>
@@ -391,13 +391,13 @@ function BookingModal({ et, onClose }) {
         <textarea rows="2" value={notes} placeholder="e.g. high-volume Friday, sample fridge request" onChange={(e) => setNotes(e.target.value)} />
         <div className={`card ${tooLittle ? '' : ''}`} style={{ background: tooLittle ? 'var(--amber-soft)' : 'var(--card2)', marginTop: 8, marginBottom: 0 }}>
           {tooLittle
-            ? <>Estimated cost <b style={{ color: 'var(--amber)' }}>{fmtMoney(cost)} cr</b> — <b>above your balance</b> of {fmtMoney(st.balance)} cr.</>
-            : <>Estimated cost <b style={{ color: 'var(--accent-ink)' }}>{fmtMoney(cost)} cr</b> on approval. Balance: {fmtMoney(st.balance)} cr.</>}
+            ? <>Estimated cost <b style={{ color: 'var(--amber)' }}>{fmtCredits(cost)} cr</b> — <b>above your balance</b> of {fmtMoney(st.balance)} cr.</>
+            : <>Estimated cost <b style={{ color: 'var(--accent-ink)' }}>{fmtCredits(cost)} cr</b> on approval. Balance: {fmtMoney(st.balance)} cr.</>}
         </div>
         {err && <div className="onnote">{err}</div>}
         <div className="flexEnd">
           <button className="btn btn-ghost" onClick={onClose}>Close</button>
-          <button className="btn btn-primary" disabled={busy || !date} onClick={submit}>{busy ? 'Sending…' : 'Send request'}</button>
+          <button className="btn btn-primary" disabled={busy || !date || !startTime} onClick={submit}>{busy ? 'Sending…' : 'Send request'}</button>
         </div>
       </div>
     </div>
@@ -409,9 +409,8 @@ function BookingModal({ et, onClose }) {
 function StaffApp() {
   const st = useStore();
   const today = todayStr();
-  const live = st.bookings.map((b) => ((b.status === 'approved' || b.status === 'confirmed') && b.date < today ? { ...b, status: 'completed' } : b));
-  const up = live.filter((b) => b.date >= today && (b.status === 'approved' || b.status === 'confirmed'));
-  const past = live.filter((b) => b.status === 'completed' || b.date < today).sort((a, b) => b.date.localeCompare(a.date));
+  const up = st.bookings.filter((b) => b.date >= today && (b.status === 'approved' || b.status === 'confirmed'));
+  const past = st.bookings.filter((b) => b.status === 'completed' || b.date < today).sort((a, b) => b.date.localeCompare(a.date));
   const groups = [];
   for (const b of up) {
     const last = groups[groups.length - 1];
@@ -464,7 +463,7 @@ function StaffApp() {
                 <button className="btn btn-primary btn-sm" onClick={() => st.completeBooking(b.id).then(() => st.showToast('Marked complete.')).catch((e) => st.showToast(e.message))}>Mark complete</button>
               )}
               {b.accountAddress && (
-                <button className="btn btn-ghost btn-sm" onClick={() => window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(b.accountAddress + ', ' + (b.accountCity || '')), '_blank')}>Maps</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => openExternal('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(b.accountAddress + ', ' + (b.accountCity || '')))}>Maps</button>
               )}
             </div>
           ))}
@@ -482,7 +481,7 @@ function StaffApp() {
                 <div className="ttl">{b.eventTypeName}</div>
                 <div className="sub">{fmtDate(b.date)} · {b.accountName} · {Number(b.durationHours) || 0}h</div>
               </div>
-              <span className="pill completed">Completed</span>
+              <span className={`pill ${STATUS_PILL[b.status] || 'soft'}`}>{STATUS_LABEL[b.status] || b.status}</span>
             </div>
           ))}
         </>

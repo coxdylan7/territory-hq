@@ -109,7 +109,8 @@ export default function Credits() {
           <span className="muted">→ [{'{'} accountName, licenseNumber, city, balance {'}'}]</span><br /><br />
           GET {apiBase}/api/credits/balances?license=OCM-XXXX<br />
           <span className="muted">→ balance for a single client by OCM license number</span><br /><br />
-          <span className="muted">Header required: Authorization: Bearer &lt;READ_TOKEN&gt;</span>
+          <span className="muted">Header required: Authorization: Bearer REPLACE_WITH_TOKEN_A</span><br />
+          <span className="muted">Replace with a token key from CROSS_APP_TOKENS_JSON; it is scoped to that owner.</span>
         </div>
         <div className="muted" style={{ marginTop: 8 }}>License number is the shared key to match a client across your apps.</div>
       </div>
