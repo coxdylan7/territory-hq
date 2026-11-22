@@ -50,6 +50,12 @@ test('each netlify.toml is discovered at its Git CI base and uses base-relative 
     assert.equal(config.build.command, site.buildCommand, `${site.name}: build command runs at base`);
     assert.equal(config.build.publish, site.publish, `${site.name}: publish is relative to base`);
     assert.equal(config.functions.directory, site.functionsDir, `${site.name}: functions are relative to base`);
+    assert.equal(config.functions.node_bundler, 'esbuild', `${site.name}: deterministic function bundler`);
+    assert.deepEqual(
+      [...config.functions.external_node_modules].sort(),
+      ['express', 'postgres'],
+      `${site.name}: runtime externals are copied into the function package`
+    );
     assert.ok(existsSync(fromBase(site, site.functionsDir)), `${site.name}: functions directory exists at base`);
     assert.ok(
       readdirSync(fromBase(site, site.functionsDir)).some((f) => f.startsWith(site.functionName + '.')),
