@@ -81,7 +81,7 @@ into a build command, repository file, or browser bundle.
 
 | Name | HQ | Portal | Purpose |
 |---|---|---|---|
-| `DATABASE_URL` | required | required | Supabase Postgres transaction-pooler URL. Server-side secret only. |
+| `DATABASE_URL` | required | required | Supabase Supavisor transaction-mode URL (port `6543`). Server-side secret only. |
 | `SKIP_SCHEMA=1` | required | required | Migrations are already applied; function boot must not issue DDL. A missing or non-`1` value returns 503 without invoking Express. |
 | `PUBLIC_ORIGIN` | required | required | Exact canonical browser origin for that site (`scheme://host[:port]`, no path or wildcard). |
 | `FIRST_PARTY_ORIGINS` | required in practice | required in practice | Exact additional credentialed origins, comma-separated. HQ normally includes the portal origin; Portal normally includes the HQ origin. |
@@ -93,6 +93,13 @@ into a build command, repository file, or browser bundle.
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | optional | n/a | SMS credentials. See the bounded blast budget below before enabling blasts. |
 | `ANTHROPIC_API_KEY` | optional | n/a | AI message drafting proxy. |
 | `ADMIN_EMAIL`, `COOKIE_SECURE`, `ALLOW_LEGACY_BEARER_SESSION` | optional as applicable | n/a | Existing application options. |
+
+`DATABASE_URL` must be the Supabase Supavisor **transaction mode** connection
+string on port `6543`, not the direct/session-port URL. The shared postgres.js
+client (`api/src/db-client.js`) sets `prepare: false` for both HQ and Portal:
+transaction-mode poolers cannot safely use prepared statements. That setting
+does not change TLS, credentials, `DATABASE_MAX`, schema setup, or application
+authorization.
 
 The function wrapper checks `DATABASE_URL`, `SKIP_SCHEMA=1`, `PUBLIC_ORIGIN`,
 and `TRUST_PROXY=1` before Express is invoked. On failure it returns JSON 503

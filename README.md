@@ -122,8 +122,10 @@ CORS is split by credential type:
    `supabase/migrations/20261122002427_secure_public_data_api.sql`. It is
    idempotent and can be re-run safely.
 3. In Dashboard → Project Settings → Database → Connection string, copy the
-   transaction-pooler connection string. Use it only as the server-side
-   `DATABASE_URL`.
+   Supavisor **transaction mode** connection string (pooler port `6543`). Use
+   it only as the server-side `DATABASE_URL`. The shared postgres.js client sets
+   `prepare: false` for both apps because transaction-mode poolers cannot
+   safely use prepared statements.
 4. In Data API settings, leave “Automatically expose new tables” disabled. The
    migration's revoked default privileges are a second layer of protection.
 
@@ -139,7 +141,7 @@ the exact two-site configuration.
 
 | Name | Purpose |
 |------|---------|
-| `DATABASE_URL` | Required. Supabase Postgres transaction-pooler connection string. Server-side secret. |
+| `DATABASE_URL` | Required. Supabase Supavisor transaction-mode connection string (port `6543`). Server-side secret; shared client sets `prepare: false`. |
 | `CROSS_APP_TOKENS_JSON` | Optional. JSON map of opaque token → one `owner_user_id`. Empty means cross-app reads are denied. Server-side secret. |
 | `PUBLIC_ORIGIN` | Canonical exact browser origin (`scheme://host[:port]`). Used for credentialed CORS and CSRF; no wildcard or path. |
 | `ALLOWED_ORIGINS` | Optional exact origins for cross-app bearer GET CORS only. Empty disallows cross-origin reads; `*` is ignored. Not used for CSRF or cookies. |

@@ -96,6 +96,15 @@ test('deployment docs list all function environment gates without values', () =>
   assert.doesNotMatch(docs, /\bsb_secret_[A-Za-z0-9_-]{8,}\b/);
 });
 
+test('deployment docs state Supavisor transaction mode, port 6543, and prepared-statement requirement', () => {
+  for (const [name, text] of [['Netlify runbook', docs], ['README', readme]]) {
+    assert.match(text, /transaction[\s-]?mode/i, `${name} must name the pooler mode`);
+    assert.match(text, /\b6543\b/, `${name} must identify the transaction-pooler port`);
+    assert.match(text, /prepare:\s*false/, `${name} must state the prepared-statement requirement`);
+  }
+  assert.match(docs, /Supavisor/i, 'Netlify runbook must name the Supabase pooler');
+});
+
 test('deployment docs define deploy order, smoke tests and rollback', () => {
   for (const fragment of [
     'Deploy HQ first',

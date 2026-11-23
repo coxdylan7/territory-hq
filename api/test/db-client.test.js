@@ -40,11 +40,45 @@ test('makeSql defers client creation and reuses one client across invocations', 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
     url: 'postgres://example/db',
-    options: { max: 1, idle_timeout: 20 },
+    options: { max: 1, prepare: false, idle_timeout: 20 },
   });
 
   assert.equal(sql.begin(), 'tx', 'tagged-template helper forwards client methods');
   assert.equal(calls.length, 1);
+});
+
+test('makeSql enforces pooler-safe prepared statements without changing other client options', () => {
+  const calls = [];
+  const factory = (url, options) => {
+    calls.push({ url, options });
+    return () => Promise.resolve([]);
+  };
+
+  const { getClient } = makeSql({
+    env: { DATABASE_URL: 'postgres://placeholder@example.invalid/db', DATABASE_MAX: '1' },
+    factory,
+    max: 4,
+    idle_timeout: 20,
+    connect_timeout: 15,
+    ssl: 'require',
+    connection: { application_name: 'territory-hq', user: 'app_user' },
+    // A caller must not be able to re-enable prepared statements against a transaction pooler.
+    prepare: true,
+  });
+
+  assert.equal(calls.length, 0);
+  getClient();
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'postgres://placeholder@example.invalid/db');
+  assert.deepEqual(calls[0].options, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 20,
+    connect_timeout: 15,
+    ssl: 'require',
+    connection: { application_name: 'territory-hq', user: 'app_user' },
+  });
 });
 
 test('makeSql without DATABASE_URL throws only on first use, without a secret value', () => {
